@@ -1,6 +1,6 @@
 # Robot Agent
 Robot operator assistant with cluade agent sdk
- 
+![agent](<agent.png>)
 ## GitHub Copilot模型列表
 
 以下模型名称根据 [GitHub Copilot支持的AI模型](https://docs.github.com/en/copilot/reference/ai-models/supported-models) 整理（2026-10-23核对）。实际可用性取决于Copilot套餐、使用的产品界面以及组织管理员策略；预览模型也可能随时变化。配置中的 `github_copilot/` 名称按Copilot模型名转换为LiteLLM模型标识，仍需结合LiteLLM版本和账户权限确认。
