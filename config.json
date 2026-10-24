@@ -1,0 +1,49 @@
+{
+  "APIKEY": "",
+  "PROXY_URL": "",
+  "LOG": true,
+  "API_TIMEOUT_MS": 600000,
+  "NON_INTERACTIVE_MODE": false,
+  "Providers": [
+    {
+      "name": "litellm",
+      "api_base_url": "http://127.0.0.1:4000/chat/completions",
+      "api_key": "sk-cc-github-litellm",
+      "models": [
+        "gpt-5.3-codex",
+        "gpt-5.4-nano",
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol",
+        "gpt-6.1-sol",
+        "claude-fable-5",
+        "claude-fable-5.1",
+        "claude-haiku-4.5",
+        "claude-haiku-5.5",
+        "claude-opus-4.8",
+        "claude-opus-4.8-fast",
+        "claude-opus-5",
+        "claude-opus-5.5",
+        "claude-sonnet-4.6",
+        "claude-sonnet-5",
+        "claude-sonnet-5.5",
+        "gemini-3.8-flash",
+        "gemini-4-argon",
+        "mai-code-1.1-flash",
+        "kimi-k3",
+        "grok-4.5",
+        "grok-4.6",
+        "grok-4.7"
+      ],
+      "transformer": {
+        "use": ["litellm"]
+      }
+    }
+  ],
+  "Router": {
+    "default": "litellm,claude-opus-5.5"
+  }
+}

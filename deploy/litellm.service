@@ -1,0 +1,20 @@
+# LiteLLM proxy (GitHub Copilot models) used by robot-agent.service at http://127.0.0.1:4000.
+# Installed by deploy/install.sh. Runs from the project directory so config.yaml can load the
+# copilot_stream_fix callback. GitHub sign-in: run `litellm --config config.yaml` once
+# interactively as @USER@ (token is cached in ~/.config/litellm/github_copilot).
+[Unit]
+Description=LiteLLM proxy for the robot agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+User=@USER@
+WorkingDirectory=@APP_DIR@
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@LITELLM_BIN@ --config @APP_DIR@/config.yaml --host 127.0.0.1 --port 4000
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

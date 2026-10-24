@@ -1,0 +1,76 @@
+# One replica only: chats, approvals and WebSocket connections live in the server process, and
+# the volumes are ReadWriteOnce, so Recreate avoids two pods sharing them during a rollout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: robot-agent-sim
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 0
+        fsGroup: 0
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: robot-agent
+          image: robot-agent-sim
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: robot-agent-sim-config
+            - secretRef:
+                name: robot-agent-sim-secrets
+          env:
+            # Also baked into the image; repeated here so the pod can never run against hardware.
+            - name: ROBOT_MODE
+              value: sim
+            - name: ROBOT_MODE_LOCK
+              value: sim
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: artifacts
+              mountPath: /app/artifacts
+            - name: sessions
+              mountPath: /app/.claude/sessions
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: robot-agent-sim-artifacts
+        - name: sessions
+          persistentVolumeClaim:
+            claimName: robot-agent-sim-sessions
+        - name: tmp
+          emptyDir: {}

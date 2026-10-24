@@ -1,0 +1,26 @@
+# Robot operator agent: web UI on HOST:PORT, runs ./robot natively on the robot computer.
+# Installed by deploy/install.sh (@APP_DIR@ and @USER@ are filled in).
+[Unit]
+Description=Robot operator agent (web UI + ./robot tools)
+Documentation=file://@APP_DIR@/README.md
+# Not Requires=: the agent must start even when robot services are down, so it can diagnose them.
+Wants=network-online.target litellm.service
+After=network-online.target litellm.service
+
+[Service]
+Type=exec
+User=@USER@
+WorkingDirectory=@APP_DIR@
+Environment=HOST=0.0.0.0 PORT=8000 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+Environment=ROBOT_PYTHON=@APP_DIR@/.venv/bin/python
+# Tokens, gateway URL, model and ROBOT_MODE; overrides the defaults above.
+EnvironmentFile=/etc/robot-agent/robot-agent.env
+ExecStart=@APP_DIR@/.venv/bin/python -m uvicorn server:app --host ${HOST} --port ${PORT}
+Restart=on-failure
+RestartSec=5
+# SIGTERM to the server first, then anything the agent left running (shells, ros2 CLI calls).
+KillMode=mixed
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

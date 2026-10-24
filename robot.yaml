@@ -1,0 +1,150 @@
+# Robot configuration used by the ./robot CLI and the agent skills.
+# Environment variables override the values marked below.
+
+# real: talk to hardware. sim: return simulated, clearly labelled data (no hardware needed).
+# Override: ROBOT_MODE
+mode: real
+
+ros:
+  # Sourced (in order) before every ./robot command. Add your overlay workspaces here.
+  # Override: ROBOT_ROS_SETUP (colon-separated)
+  # Missing files are skipped.
+  setup_files:
+    - /opt/ros/humble/setup.bash
+    # unitree_go / unitree_api messages (B2 state, sport commands, B2 front/rear cameras)
+    - ~/unitree_ros2/cyclonedds_ws/install/setup.bash
+    # Robot workspace on PC4: infai_bringup, infai_slam, infai_navigation2, dog_inspection,
+    # dog_survey, dog_interfaces
+    - ~/dog_ws/infai_work/install/setup.bash
+  # Unitree B2 uses CycloneDDS on the robot's wired network.
+  rmw_implementation: rmw_cyclonedds_cpp
+  # Override: ROBOT_DDS_INTERFACE
+  dds_interface: eth0
+  domain_id: 0
+
+base:
+  # Unitree B2 quadruped (ROS 2 interface from unitree_ros2, unitree_go + unitree_api messages)
+  sport_request_topic: /api/sport/request
+  sport_state_topic: /sportmodestate      # or /lf/sportmodestate
+  low_state_topic: /lowstate              # or /lf/lowstate
+  # Nav2 velocity output. `./robot base move` refuses to run while this topic has publishers,
+  # so manual moves cannot fight navigation, localization-driven inspection or survey runs.
+  nav_cmd_topic: /cmd_vel_nav
+  # Hard limits applied by `./robot base move` regardless of what the agent requests.
+  max_vx: 0.5        # m/s
+  max_vy: 0.3        # m/s
+  max_vyaw: 0.6      # rad/s
+  max_duration: 3.0  # s
+  min_battery_pct: 15  # refuse to walk below this state of charge
+  # RecoveryStand (api 1006) rolls the body over and pushes it up; with the Piper arm, cameras
+  # and other devices mounted on the B2 it can crush them. `./robot base recovery-stand` refuses
+  # and the agent is blocked from it unless this is true. Recover a fallen robot by hand.
+  allow_recovery_stand: false
+
+arm:
+  # The single AgileX Piper arm. CAN is brought up by piper-can.service; manual activation
+  # (operator, sudo): cd ~/piper_sdk/piper_sdk && bash can_activate.sh can0 1000000
+  can_port: can0
+  # Speed percentage used for arm moves (1-100). The CLI never exceeds max_speed.
+  default_speed: 20
+  max_speed: 50
+  # Joint angles (degrees) used by `./robot arm home`
+  home_deg: [0, 0, 0, 0, 0, 0]
+  # Joint limits [min, max] in degrees for the arm as mounted on the robot (J1..J6). The body and
+  # mount stop the joints well before the official Piper limits (J1 -150..150, J2 0..180,
+  # J3 -170..0, J4 -100..100, J5 -70..70, J6 -120..120); values outside those are clipped.
+  # Enforced by `arm move-joints/home` and by `traj play` (+3 deg tolerance for recorded points).
+  # PLACEHOLDER conservative values - measure the real reachable range and update them.
+  joint_limits_deg:
+    - [-90, 90]     # J1 base yaw
+    - [0, 120]      # J2 shoulder
+    - [-120, 0]     # J3 elbow
+    - [-80, 80]     # J4 wrist roll
+    - [-65, 65]     # J5 wrist pitch
+    - [-100, 100]   # J6 wrist roll
+  # Largest change of any joint in one `arm move-joints` / `arm home` command.
+  max_step_deg: 30
+  # AgiLex recordTrajectory_new.py / playTrajectory_new.py, used by `./robot traj`
+  trajectory_dir: ~/Agilex-College/piper/recordAndPlayTraj
+
+cameras:
+  # source: ros:<image topic> | v4l2:<device or index> | unitree:<B2 video service>
+  #         | icamera:<directory with the x86_64 libiCamera.so and libgraph.so>
+  # fallback: optional second source used when the main source is unavailable.
+  # The B2 front/rear cameras are read through the B2 video service (one JPEG per request on
+  # /api/<service>/request and /api/<service>/response, unitree_api messages).
+  b2_front:
+    source: unitree:front_videohub
+  b2_back:
+    source: unitree:back_videohub
+  # Intel RealSense D455 colour stream (realsense2_camera). Without the ROS driver running,
+  # the colour stream is read directly from /dev/video4 (YUYV 640x360 on PC4).
+  realsense_d455:
+    source: ros:/camera/camera/color/image_raw
+    fallback: v4l2:/dev/video4
+  # Orbbec Gemini RGB (UVC colour stream, the plant survey camera). Not set here: pick its V4L2
+  # device with `./robot camera devices` and `./robot camera set-source --camera orbbec_gemini
+  # --source v4l2:/dev/v4l/by-id/...` (saved in artifacts/run/camera_sources.json).
+  orbbec_gemini:
+    source: ""
+  # CCJT iCAMERA multispectral camera (USB ae86:0001, 752x480, 9 bands 624-776 nm) via the
+  # vendor SDK. Exclusive: icamera.service and ConsumerMosaicDemo must not be running.
+  icamera:
+    source: icamera:~/icamera_demo
+
+mapping:
+  # unitree: B2 built-in SLAM (unitree_slam, LIO-SAM) driven through the qt_command topic.
+  #          Needs the unitree_interfaces ROS 2 message package from Unitree.
+  # command: any ROS 2 SLAM launch (slam_toolbox, FAST-LIO, ...) started as a background
+  #          process; maps are saved with nav2 map_saver_cli.
+  backend: unitree
+  unitree:
+    command_topic: /qt_command
+    command_type: unitree_interfaces/msg/QtCommand
+    notice_topic: /qt_notice
+  # Used by the command backend. Override: ROBOT_MAP_START_CMD
+  start_cmd: ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false
+  map_topic: /map
+  # Saved maps go to artifacts/maps/<name>.{yaml,pgm,png}
+  save_cmd: ros2 run nav2_map_server map_saver_cli -t /map -f {path}
+  # RoboSense lidar point cloud
+  cloud_topic: /rslidar_points
+
+survey:
+  # Plant survey (`./robot survey check|run`, plant-survey skill): replay a taught arm motion while
+  # the survey camera records a video. The motion is the trajectory artifacts/trajectories/
+  # <trajectory>.csv, taught with `./robot traj record --name survey`.
+  trajectory: survey
+  # Camera that records the survey video. Its source can be chosen at runtime from the V4L2
+  # devices with `./robot camera set-source --camera orbbec_gemini --source v4l2:<path>`.
+  camera: orbbec_gemini
+  video_seconds: 20   # clip length from the start of the replay (max 20)
+  video_fps: 10
+  motion_seconds: [15, 30]   # expected length of the survey motion (outside: warning only)
+
+logs:
+  # Extra log files/directories the agent may inspect with `./robot logs`
+  paths:
+    - ~/.ros/log
+    - ~/Agilex-College/piper/recordAndPlayMQTT/logs
+  # Restrict `./robot logs --source system` to these units ([] = the whole journal).
+  # Use `./robot logs --unit NAME` to read one service.
+  journal_units: []
+
+# Robot systemd services on PC4. `./robot status` shows whether each is running.
+# Names are exact: hyphen and underscore are not interchangeable.
+services:
+  - piper.service
+  - piper-can.service
+  - dogoo_can0_activate.service
+  - icamera.service
+  - dog_survey.service
+  - vcopy.service
+
+# Topics shown in `./robot status` for information. They are only published while the matching
+# system runs, so a missing topic is not reported as a fault.
+monitor_topics:
+  imu: /dog_imu_raw
+  rtk gps: /fix
+  slam odometry: /infai_slam/mapping/odometry
+  nav velocity: /cmd_vel_nav

@@ -1,0 +1,25 @@
+.git
+**/__pycache__
+**/*.pyc
+.pytest_cache
+*.egg-info
+build/
+dist/
+
+# Runtime output and saved chats (mount them as volumes instead)
+artifacts/
+.claude/sessions/
+
+# Local LiteLLM / Claude Code Router configs (not used by the server)
+config.json
+config.yaml
+settings.local.json
+esprima-4.0.1.tar.gz
+
+Dockerfile
+Dockerfile.*
+.dockerignore
+k8s/
+.venv/
+.venv-litellm/
+deploy/

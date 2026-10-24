@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161817" media="(prefers-color-scheme: dark)">
+  <!-- iPad / iPhone: "Add to Home Screen" opens the UI full screen, like an app. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Robot Agent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Robot Agent</title>
+  <script type="importmap">
+    { "imports": { "three": "/static/vendor/three/three.module.min.js", "three/addons/": "/static/vendor/three/addons/" } }
+  </script>
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    (() => {
+      let t = localStorage.getItem("robotTheme");
+      if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+      // Touch screens (iPad reports a desktop user agent, but has touch points): larger tap
+      // targets, no hover-only controls, 16 px inputs so Safari does not zoom on focus.
+      if (navigator.maxTouchPoints > 0 || matchMedia("(any-pointer: coarse)").matches) {
+        document.documentElement.classList.add("touch");
+      }
+    })();
+  </script>
+  <style>
+    :root {
+      /* Neutral surfaces; leaf green is the primary/accent colour. */
+      --bg: #f7f7f5; --panel: #fff; --panel-2: #fafaf8; --panel-3: #fcfcfb; --ink: #1f2320; --ink-2: #3a3f3b;
+      --muted: #6f746f; --muted-2: #a2a6a1; --line: #e3e5e1; --line-2: #eff0ed; --code-bg: #eef0ec; --th-bg: #f1f2ef;
+      --avatar-bg: #e9ebe7; --avatar-ink: #4f554f; --topbar-bg: rgba(255,255,255,.85); --input-line: #d9dcd6;
+      --btn-dark: #2f7d32; --btn-dark-ink: #fff; --pre-bg: #1f2321; --pre-ink: #e9ebe7; --img-bg: #e2e4e0;
+      --side: #f0f1ee; --side-2: #e3e6df; --side-ink: #262a26; --side-muted: #757a74; --side-line: #d6d9d3;
+      --side-card: #fafaf8; --side-card-line: #dcdfd9; --issues: #b2402f; --seg-bg: #e5e7e2;
+      --allow-bg: #e3f2dc; --allow-ink: #2c6f26; --ask-bg: #fdf0e3; --ask-ink: #a85a1d;
+      --deny-bg: #fbe6e3; --deny-ink: #a3352b; --neutral-bg: #eeefec; --neutral-ink: #6b6f6a;
+      --approval-bg: #fff8f1; --approval-sys-bg: #fffbf0; --err-bg: #fbe9e6; --err-ink: #93342b;
+      --warn-bg: #fdf3df; --warn-ink: #855d12; --chip-bg: #e6f2df; --chip-ink: #2f6f26;
+      --sugg-hover-line: #9cc98a; --sugg-hover-bg: #f7fbf4;
+      --sim-bg: #fbecc4; --sim-ink: #8a6210; --real-bg: #dcf0d6; --real-ink: #24661f;
+      --accent: #3f8f3a; --leaf: #5aa83f;
+      --ok: #3f9a46; --warn: #c58a1b; --bad: #c2453a; --motion: #d0702a;
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink); background: var(--bg);
+    }
+    :root[data-theme="dark"] {
+      --bg: #161817; --panel: #1f2220; --panel-2: #1b1d1c; --panel-3: #1d1f1e; --ink: #e6e8e5; --ink-2: #cdd0cc;
+      --muted: #9a9e99; --muted-2: #757a74; --line: #333733; --line-2: #2a2d2a; --code-bg: #2b2e2b; --th-bg: #282b28;
+      --avatar-bg: #2b2e2b; --avatar-ink: #cdd0cc; --topbar-bg: rgba(22,24,23,.85); --input-line: #393d39;
+      --btn-dark: #6fbf5a; --btn-dark-ink: #10180f; --pre-bg: #111312; --pre-ink: #e6e8e5; --img-bg: #2e312e;
+      --side: #1b1d1c; --side-2: #2a2d2a; --side-ink: #e6e8e5; --side-muted: #9a9e99; --side-line: #3a3e3a;
+      --side-card: #202321; --side-card-line: #343834; --issues: #f0b9a8; --seg-bg: #2a2d2a;
+      --allow-bg: #1d3a20; --allow-ink: #8fd877; --ask-bg: #45301a; --ask-ink: #f0a868;
+      --deny-bg: #4a2220; --deny-ink: #f09a90; --neutral-bg: #2b2e2b; --neutral-ink: #b0b4af;
+      --approval-bg: #2b2219; --approval-sys-bg: #2b2817; --err-bg: #3d1f1c; --err-ink: #f2a79d;
+      --warn-bg: #3a2f16; --warn-ink: #eac46a; --chip-bg: #1f3320; --chip-ink: #9fd987;
+      --sugg-hover-line: #4f8a40; --sugg-hover-bg: #1d221d;
+      --sim-bg: #4a3d16; --sim-ink: #f2c75c; --real-bg: #193a1d; --real-ink: #8fd877;
+      --accent: #78c25e; --leaf: #86cf6a;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { margin: 0; height: 100vh; height: 100dvh; overflow: hidden; background: var(--bg); color: var(--ink); }
+    button, textarea, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .app { display: flex; height: 100vh; height: 100dvh; }
+    #conversation, .sidebar, .modal-body, .gallery, .skill-list { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+    /* Sidebar */
+    .sidebar { width: 300px; flex: 0 0 300px; display: flex; flex-direction: column; gap: 14px;
+      padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); color: var(--side-ink); background: var(--side); overflow-y: auto; border-right: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; font-weight: 650; }
+    .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px;
+      background: linear-gradient(145deg, #8fd06a, #3f7f2a); color: #fff; box-shadow: 0 2px 8px rgba(40, 90, 30, .35); }
+    .brand-mark svg { width: 20px; height: 20px; }
+    .brand small { display: block; font-size: 10.5px; font-weight: 500; color: var(--side-muted); letter-spacing: .02em; }
+    .new-chat { width: 100%; padding: 9px 11px; border: 1px solid var(--side-line); border-radius: 9px;
+      color: var(--side-ink); background: transparent; text-align: left; }
+    .new-chat:hover { background: var(--side-2); }
+    .section { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--side-muted); padding: 0 6px; display: flex; align-items: center; justify-content: space-between; }
+    .section button { border: 0; background: none; color: var(--side-muted); font-size: 11px; padding: 0; text-transform: none; letter-spacing: 0; }
+    .section button:hover { color: var(--side-ink); }
+    #chat-list { display: flex; flex-direction: column; gap: 2px; }
+    .chat-row { display: flex; align-items: center; border-radius: 8px; }
+    .chat-row:hover, .chat-row.active { background: var(--side-2); }
+    .chat-row.active { box-shadow: inset 3px 0 0 var(--accent); }
+    .chat-open { flex: 1; min-width: 0; padding: 8px 9px; border: 0; background: none; color: var(--side-ink);
+      text-align: left; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-open .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px;
+      background: transparent; vertical-align: middle; }
+    .chat-open .dot.busy { background: var(--accent); animation: pulse 1s infinite; }
+    .chat-del { visibility: hidden; border: 0; background: none; color: var(--side-muted); padding: 4px 8px; font-size: 15px; }
+    .chat-row:hover .chat-del { visibility: visible; }
+    .side-link { width: 100%; padding: 7px 9px; border: 0; border-radius: 8px; background: none; color: var(--side-ink); text-align: left; font-size: 13px; }
+    .side-link:hover { background: var(--side-2); }
+    .side-link.more { color: var(--side-muted); font-size: 12.5px; }
+    .side-link.more:hover { color: var(--side-ink); }
+    .side-links { display: flex; flex-direction: column; gap: 2px; }
+    .status-card { border: 1px solid var(--side-card-line); border-radius: 10px; padding: 10px; font-size: 12px; background: var(--side-card); }
+    .status-verdict { display: flex; align-items: center; gap: 7px; font-weight: 650; margin-bottom: 8px; }
+    .status-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; }
+    .status-grid .k { color: var(--side-muted); }
+    .status-grid .v { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .issues { margin: 8px 0 0; padding-left: 16px; color: var(--issues); }
+    .issues li { margin: 2px 0; }
+    .issues-text { color: var(--issues); }
+    .light { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; flex: none; }
+    .light.ok { background: var(--ok); } .light.warn { background: var(--warn); } .light.bad { background: var(--bad); }
+    .settings { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 10px; padding: 0 6px; font-size: 12px; color: var(--side-muted); }
+    .settings .seg { justify-self: end; }
+    .side-note { margin-top: auto; font-size: 11px; color: var(--side-muted); line-height: 1.5; padding: 0 6px; }
+
+    /* Segmented controls (language, theme, robot mode) */
+    .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--seg-bg); gap: 2px; }
+    .seg button { border: 0; background: none; padding: 3px 10px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+    .sidebar .seg button { color: var(--side-muted); }
+    .seg button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 600; }
+    .sidebar .seg button.on { color: var(--side-ink); }
+    .mode-switch button { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 4px 10px; }
+    .mode-switch button.on.sim { background: var(--sim-bg); color: var(--sim-ink); }
+    .mode-switch button.on.real { background: var(--real-bg); color: var(--real-ink); }
+    .mode-switch button:disabled:not(.on) { opacity: .45; }
+
+    /* Main */
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+    .topbar { display: flex; align-items: center; gap: 12px; flex: none; min-height: 60px; padding: env(safe-area-inset-top) max(22px, env(safe-area-inset-right)) 0 22px;
+      border-bottom: 1px solid var(--line); background: var(--topbar-bg); backdrop-filter: blur(8px); }
+    #title { font-weight: 650; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    #stop-turn { display: none; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 12.5px; }
+    #stop-turn:hover { border-color: var(--muted-2); }
+    #estop { padding: 9px 16px; border: 0; border-radius: 9px; color: #fff; background: #c4231a;
+      font-weight: 800; letter-spacing: .06em; font-size: 13px; box-shadow: 0 0 0 3px rgba(196,35,26,.18); }
+    #estop:hover { background: #a91a12; }
+    #recover { padding: 8px 13px; border: 1px solid var(--ok); border-radius: 9px; color: var(--allow-ink); background: var(--allow-bg);
+      font-weight: 700; font-size: 12.5px; white-space: nowrap; }
+    #recover:hover:not(:disabled) { filter: brightness(.96); }
+    #recover:disabled { opacity: .6; cursor: progress; }
+    #recover[hidden] { display: none; }
+    .notice.ok { background: var(--allow-bg); color: var(--allow-ink); }
+    #conversation { flex: 1; overflow-y: auto; padding: 28px 24px 24px; }
+    .thread { max-width: 900px; margin: 0 auto; }
+    .welcome { max-width: 620px; margin: 8vh auto 0; text-align: center; }
+    .welcome h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -.03em; }
+    .welcome-art { display: block; width: 132px; height: 84px; margin: 0 auto 10px; }
+    .welcome p { margin: 0 auto; color: var(--muted); font-size: 14px; line-height: 1.6; max-width: 520px; }
+    .suggestions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin-top: 26px; text-align: left; }
+    .suggestion { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+    .suggestion b { display: block; margin-bottom: 3px; font-size: 12px; color: var(--accent); }
+    .suggestion:hover { border-color: var(--sugg-hover-line); background: var(--sugg-hover-bg); }
+
+    .msg { display: flex; gap: 12px; margin: 0 0 18px; }
+    .avatar { flex: 0 0 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+      font-size: 12px; font-weight: 700; background: var(--avatar-bg); color: var(--avatar-ink); }
+    .msg.assistant .avatar { background: linear-gradient(145deg, #8fd06a, #3f7f2a); color: #fff; }
+    .avatar svg { width: 17px; height: 17px; }
+    .msg-body { flex: 1; min-width: 0; padding-top: 4px; font-size: 14px; line-height: 1.62; }
+    .msg.user .msg-body { white-space: pre-wrap; }
+    .md p { margin: 0 0 .7em; } .md p:last-child { margin-bottom: 0; }
+    .md h1, .md h2, .md h3, .md h4 { margin: .9em 0 .4em; font-size: 15px; }
+    .md ul, .md ol { margin: .3em 0 .7em; padding-left: 1.4em; }
+    .md code { padding: 1px 5px; border-radius: 5px; background: var(--code-bg); font-size: 12.5px; }
+    .md pre { padding: 10px 12px; border-radius: 8px; background: var(--pre-bg); color: var(--pre-ink); overflow-x: auto; font-size: 12px; }
+    .md pre code { padding: 0; background: none; }
+    .md table { border-collapse: collapse; margin: .5em 0 .8em; font-size: 13px; }
+    .md th, .md td { border: 1px solid var(--line); padding: 4px 9px; text-align: left; }
+    .md th { background: var(--th-bg); }
+
+    .tool { margin: 0 0 12px 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+    .tool-head { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12.5px; }
+    .tool-name { font-weight: 650; color: var(--ink-2); }
+    .tool-desc { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge { padding: 2px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+    .badge.allow { background: var(--allow-bg); color: var(--allow-ink); }
+    .badge.ask { background: var(--ask-bg); color: var(--ask-ink); }
+    .badge.deny, .badge.error { background: var(--deny-bg); color: var(--deny-ink); }
+    .badge.running { background: var(--neutral-bg); color: var(--neutral-ink); }
+    .tool-cmd { margin: 0; padding: 7px 11px; border-top: 1px solid var(--line-2); background: var(--panel-2); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+    .tool-cmd::before { content: "$ "; color: var(--muted-2); }
+    details.out summary { padding: 6px 11px; font-size: 12px; color: var(--muted); cursor: pointer; border-top: 1px solid var(--line-2); }
+    details.out pre { margin: 0; max-height: 340px; overflow: auto; padding: 8px 11px 10px; font-size: 11.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); background: var(--panel-3); }
+    .media { display: flex; flex-wrap: wrap; gap: 8px; padding: 9px 11px; border-top: 1px solid var(--line-2); }
+    .media-tile { position: relative; display: block; padding: 0; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--img-bg); }
+    .media-tile img { display: block; max-width: 280px; max-height: 210px; }
+    .media-tile video { display: block; width: 360px; max-width: 100%; max-height: 240px; background: #000; }
+    button.media-tile { cursor: zoom-in; }
+    button.media-tile:hover, .media-tile:hover { border-color: var(--leaf); }
+    .media-tile .expand { position: absolute; top: 6px; right: 6px; border: 0; border-radius: 6px; padding: 2px 7px; font-size: 13px; color: #fff; background: rgba(0,0,0,.55); }
+    .media-tile .tag { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 5px; font-size: 10.5px; color: #fff; background: rgba(0,0,0,.55); pointer-events: none; }
+    .cloud-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 200px; height: 140px;
+      color: #d9dcd8; background: radial-gradient(circle at 50% 40%, #2c302d, #151716); text-align: center; }
+    .cloud-tile .icon { font-size: 30px; line-height: 1; color: #86cf6a; }
+    .cloud-tile .nm { max-width: 180px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cloud-tile .sz { font-size: 11px; color: #9a9e99; }
+    .media-error { padding: 10px; font-size: 12px; color: #fff; background: #5b2420; }
+    .ov-body > img { box-shadow: 0 10px 40px rgba(0,0,0,.45); }
+
+    /* Full-screen media viewer and media browser (always dark) */
+    .overlay { position: fixed; inset: 0; z-index: 40; display: none; flex-direction: column; background: rgba(14,15,15,.96); color: #ececea; }
+    .overlay.open { display: flex; }
+    #viewer { z-index: 45; background: #0c0c0e; }
+    .ov-head { display: flex; align-items: center; gap: 10px; padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .ov-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .ov-meta { color: #9a9e99; font-size: 12px; white-space: nowrap; }
+    .ov-btn { border: 1px solid #3a3d3a; border-radius: 7px; padding: 5px 10px; color: #ececea; background: #202221; font-size: 12.5px; text-decoration: none; }
+    .ov-btn:hover { background: #2a2d2b; }
+    .ov-btn.on { border-color: #6fbf5a; color: #b9eca0; background: rgba(111,191,90,.14); }
+    .ov-body { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+    .ov-body > img, .ov-body > video { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .ov-body canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+    .ov-status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 13px; color: #bbb; text-align: center; max-width: 80%; white-space: pre-wrap; }
+    .ov-nav { position: absolute; top: 50%; transform: translateY(-50%); border: 0; width: 40px; height: 56px; border-radius: 8px; font-size: 22px; color: #fff; background: rgba(255,255,255,.08); z-index: 2; }
+    .ov-nav:hover { background: rgba(255,255,255,.18); }
+    .ov-nav.prev { left: 10px; } .ov-nav.next { right: 10px; }
+    .ov-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid rgba(255,255,255,.08); font-size: 12px; color: #aaa; }
+    .ov-tools:empty { display: none; }
+    .ov-tools select { padding: 3px 6px; border-radius: 6px; border: 1px solid #3a3d3a; background: #202221; color: #ececea; font-size: 12px; }
+    .ov-tools input[type="range"] { accent-color: #6fbf5a; }
+    .ov-hint { margin-left: auto; color: #777; }
+    .gallery-filters { display: flex; gap: 6px; }
+    .gallery { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); grid-auto-rows: max-content; gap: 12px; align-content: start; }
+    .g-item { display: flex; flex-direction: column; padding: 0; border: 1px solid #2c2f2c; border-radius: 10px; overflow: hidden; color: #ddd; background: #1c1e1d; text-align: left; transition: transform .12s ease, border-color .12s ease; }
+    .g-item:hover { border-color: #6fbf5a; }
+    @media (hover: hover) { .g-item:hover { transform: translateY(-2px); } }
+    .g-thumb { position: relative; flex: 0 0 130px; height: 130px; display: flex; align-items: center; justify-content: center; background: #121312; overflow: hidden; }
+    .g-thumb img, .g-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    .g-thumb .icon { font-size: 34px; color: #86cf6a; }
+    .g-thumb .tag { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 5px; font-size: 10.5px; color: #fff; background: rgba(0,0,0,.6); }
+    .g-cap { padding: 6px 8px; font-size: 11.5px; line-height: 1.35; }
+    .g-cap .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-cap .sub { color: #8c908b; }
+    .gallery-empty { grid-column: 1 / -1; text-align: center; color: #888; padding: 40px 0; font-size: 13px; }
+    .skill-chip { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px 40px; padding: 4px 10px; border-radius: 99px; background: var(--chip-bg); color: var(--chip-ink); font-size: 12px; font-weight: 600; }
+
+    .approval { border-top: 2px solid var(--motion); background: var(--approval-bg); padding: 11px; }
+    .approval.system, .approval.unknown { border-top-color: var(--warn); background: var(--approval-sys-bg); }
+    .approval h4 { margin: 0 0 4px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+    .approval p { margin: 0 0 9px; font-size: 12.5px; color: var(--muted); }
+    .approval-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .approval input { flex: 1; min-width: 160px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 12.5px; background: var(--panel); }
+    .btn-approve { padding: 7px 14px; border: 0; border-radius: 7px; background: var(--btn-dark); color: var(--btn-dark-ink); font-weight: 650; font-size: 12.5px; }
+    .btn-decline { padding: 7px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); font-size: 12.5px; }
+    .countdown { font-size: 11.5px; color: var(--muted); margin-left: auto; }
+    .approval-done { padding: 7px 11px; border-top: 1px solid var(--line-2); font-size: 12px; font-weight: 600; }
+    .approval-done.yes { color: var(--allow-ink); } .approval-done.no { color: var(--deny-ink); }
+
+    .notice { margin: 0 0 14px 40px; padding: 8px 11px; border-radius: 8px; font-size: 12.5px; white-space: pre-wrap; }
+    .notice.error { background: var(--err-bg); color: var(--err-ink); }
+    .notice.warning { background: var(--warn-bg); color: var(--warn-ink); }
+    .notice.estop { background: #c4231a; color: #fff; font-weight: 600; }
+    .result-line { margin: -6px 0 18px 40px; font-size: 11px; color: var(--muted-2); }
+    .working { display: none; margin: 0 0 16px 40px; font-size: 12.5px; color: var(--muted); align-items: center; gap: 8px; }
+    .working.show { display: flex; }
+    .spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 50% { opacity: .35; } }
+
+    .composer-wrap { padding: 10px max(22px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) 22px; }
+    .composer { display: flex; align-items: flex-end; gap: 10px; max-width: 900px; margin: 0 auto; padding: 10px 10px 10px 14px;
+      border: 1px solid var(--input-line); border-radius: 14px; background: var(--panel); box-shadow: 0 4px 20px rgba(30,30,20,.05); }
+    .composer:focus-within { border-color: var(--leaf); box-shadow: 0 0 0 3px rgba(90,168,63,.16), 0 4px 20px rgba(30,30,20,.05); }
+    textarea { flex: 1; min-height: 26px; max-height: 160px; resize: none; border: 0; outline: 0; background: none; font-size: 14px; line-height: 1.5; }
+    textarea::placeholder, input::placeholder { color: var(--muted-2); }
+    #send { flex: 0 0 34px; height: 34px; border: 0; border-radius: 9px; background: var(--btn-dark); color: var(--btn-dark-ink); font-size: 17px; }
+    #send:disabled { opacity: .35; }
+    .hint { max-width: 900px; margin: 7px auto 0; text-align: center; font-size: 11px; color: var(--muted-2); }
+    .toast { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); max-width: 420px; padding: 12px 14px; border-radius: 10px; color: #fff;
+      background: #2d2f2c; font-size: 13px; white-space: pre-wrap; box-shadow: 0 8px 30px rgba(0,0,0,.2); display: none; z-index: 50; }
+    .toast.show { display: block; } .toast.bad { background: #b0261d; }
+
+    /* Dialogs: all chats, suggested prompts, skills */
+    .modal-back { position: fixed; inset: 0; z-index: 35; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(10,12,10,.45); }
+    .modal-back.open { display: flex; }
+    .modal { display: flex; flex-direction: column; width: min(720px, 100%); max-height: min(86vh, 900px); border: 1px solid var(--line); border-radius: 14px;
+      background: var(--panel); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+    .modal.wide { width: min(1120px, 100%); height: min(86vh, 900px); }
+    .modal-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { flex: 1; margin: 0; font-size: 15px; }
+    .modal-help { padding: 10px 16px 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+    .modal-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; }
+    .modal-foot { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-top: 1px solid var(--line); background: var(--panel-2); }
+    .modal-foot .grow { flex: 1; }
+    .btn { padding: 7px 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 12.5px; }
+    .btn:hover:not(:disabled) { border-color: var(--muted-2); }
+    .btn:disabled { opacity: .45; }
+    .btn.primary { border-color: transparent; background: var(--btn-dark); color: var(--btn-dark-ink); font-weight: 650; }
+    .btn.danger { color: var(--deny-ink); }
+    .btn.icon { padding: 4px 9px; }
+    .field { width: 100%; padding: 7px 9px; border: 1px solid var(--input-line); border-radius: 8px; background: var(--panel); font-size: 13px; outline: 0; }
+    .field:focus { border-color: var(--leaf); box-shadow: 0 0 0 3px rgba(90,168,63,.16); }
+    textarea.field { resize: vertical; min-height: 54px; max-height: none; line-height: 1.45; }
+    .modal-chat { display: flex; align-items: center; gap: 8px; border-radius: 8px; }
+    .modal-chat:hover, .modal-chat.active { background: var(--line-2); }
+    .modal-chat .chat-open { color: var(--ink); }
+    .modal-chat .when { flex: none; font-size: 11.5px; color: var(--muted); }
+    .modal-chat .chat-del { visibility: visible; color: var(--muted); }
+    .modal-empty { padding: 30px 0; text-align: center; color: var(--muted); font-size: 13px; }
+    .prompt-row { display: grid; grid-template-columns: 170px 1fr auto; gap: 8px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--line-2); }
+    .prompt-row:last-child { border-bottom: 0; }
+    .prompt-row .ops { display: flex; gap: 4px; }
+    .tag-pill { padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 650; background: var(--neutral-bg); color: var(--neutral-ink); }
+    .tag-pill.on { background: var(--allow-bg); color: var(--allow-ink); }
+    .skills-pane { display: grid; grid-template-columns: 260px 1fr; flex: 1; min-height: 0; }
+    .skill-list { overflow-y: auto; padding: 8px; border-right: 1px solid var(--line); background: var(--panel-2); }
+    .skill-item { display: block; width: 100%; padding: 8px 10px; margin-bottom: 2px; border: 0; border-radius: 8px; background: none; text-align: left; }
+    .skill-item:hover { background: var(--line-2); }
+    .skill-item.active { background: var(--line-2); box-shadow: inset 3px 0 0 var(--accent); }
+    .skill-item .nm { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+    .skill-item .nm .tag-pill { margin-left: auto; }
+    .skill-item.off .nm span:first-child { color: var(--muted); text-decoration: line-through; }
+    .skill-item .ds { margin-top: 2px; font-size: 11.5px; color: var(--muted); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .skill-edit { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .skill-edit .modal-body { display: flex; flex-direction: column; gap: 8px; }
+    .skill-edit textarea.field { flex: 1; min-height: 160px; resize: none; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; tab-size: 2; }
+    .skill-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; }
+    .skill-title .field { max-width: 260px; font-weight: 500; }
+    .modal-error { color: var(--deny-ink); font-size: 12.5px; white-space: pre-wrap; }
+
+    #menu { display: none; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 6px 10px; font-size: 15px; }
+    .scrim { display: none; }
+    /* Tablet portrait (iPad 744-1023 px wide), iPad Split View and phones: the sidebar becomes a
+       drawer opened with the menu button, so the chat keeps the full width. */
+    @media (max-width: 1023px) {
+      .sidebar { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 86vw; max-width: 340px;
+        transform: translateX(-100%); transition: transform .2s ease; }
+      .sidebar.open { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.35); }
+      .scrim.open { display: block; position: fixed; inset: 0; z-index: 15; background: rgba(0,0,0,.3); }
+      #menu { display: inline-block; }
+      .topbar { padding-left: max(16px, env(safe-area-inset-left)); }
+      #conversation { padding: 22px 20px; }
+    }
+    /* Phones and narrow iPad Split View / Slide Over */
+    @media (max-width: 760px) {
+      .topbar { padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); gap: 8px; }
+      .conn #conn-label { display: none; }
+      #recover .lbl { display: none; }
+      .mode-switch button { padding: 4px 7px; }
+      #conversation { padding: 18px 12px; }
+      .composer-wrap { padding: 8px max(10px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
+      .suggestions { grid-template-columns: 1fr; }
+      .tool, .notice, .skill-chip, .working, .result-line { margin-left: 0; }
+      .media-tile img, .media-tile video { max-width: 100%; }
+      .ov-hint { display: none; }
+      .modal-back { padding: 0; }
+      .modal, .modal.wide { width: 100%; height: 100%; max-height: none; border-radius: 0; }
+      .prompt-row { grid-template-columns: 1fr; }
+      .skills-pane { grid-template-columns: 1fr; grid-template-rows: 34% 1fr; }
+      .skill-list { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    /* Touch screens (html.touch, set in the head script): finger-sized targets (~44 px), no
+       hover-only controls, no double-tap zoom on buttons. */
+    html.touch :is(button, summary, a, .chat-open) { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    /* Safari zooms into any text field smaller than 16 px when it gets focus. */
+    html.touch :is(textarea, input, select), html.touch .skill-edit textarea.field { font-size: 16px; }
+    html.touch .chat-del { visibility: visible; min-width: 44px; min-height: 44px; }
+    html.touch .chat-open { min-height: 44px; padding: 12px 10px; }
+    html.touch :is(.new-chat, .side-link) { min-height: 44px; }
+    html.touch .section button { padding: 10px 6px; margin: -10px -6px; }
+    html.touch .seg button { min-height: 34px; padding: 6px 13px; }
+    html.touch #menu { min-width: 44px; min-height: 40px; }
+    html.touch #stop-turn { min-height: 40px; padding: 8px 14px; }
+    html.touch #estop { min-height: 44px; padding: 10px 20px; }
+    html.touch #recover { min-height: 44px; padding: 10px 16px; }
+    html.touch #send { flex-basis: 44px; height: 44px; }
+    html.touch :is(.btn-approve, .btn-decline) { min-height: 44px; padding: 10px 22px; font-size: 14px; }
+    html.touch .approval input { min-height: 44px; }
+    html.touch details.out summary { padding: 11px; }
+    html.touch .suggestion { padding: 14px; }
+    html.touch .btn { min-height: 40px; }
+    html.touch .btn.icon { min-width: 40px; }
+    html.touch .skill-item { padding: 11px 12px; }
+    html.touch .ov-btn { min-height: 40px; padding: 8px 13px; }
+    html.touch .ov-nav { width: 52px; height: 72px; }
+    html.touch .ov-hint { display: none; }
+    html.touch .media-tile .expand { padding: 6px 11px; }
+    @media (max-width: 760px) { html.touch .mode-switch button { padding: 6px 9px; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21v-8"/><path d="M12 13c0-4 2.6-6.5 7-6.5 0 4.2-2.7 6.5-7 6.5z" fill="currentColor" fill-opacity=".35"/><path d="M12 15c0-3.4-2.2-5.5-6-5.5 0 3.5 2.3 5.5 6 5.5z" fill="currentColor" fill-opacity=".35"/></svg></span><span><span data-i18n="appName">Robot Agent</span><small data-i18n="brandTag"></small></span></div>
+    <button class="new-chat" id="new-chat" type="button" data-i18n="newChat">＋ New chat</button>Unitree B2 + AgileX Piper + iCamera
+
+    <div class="section"><span data-i18n="robot">Robot</span> <button id="refresh-status" type="button" data-i18n="refresh" data-i18n-title="refreshTitle">↻ refresh</button></div>
+    <div class="status-card" id="status-card"><span style="color:var(--side-muted)" data-i18n="loadingStatus">Loading status…</span></div>
+
+    <div class="section" data-i18n="chats">Chats</div>
+    <nav id="chat-list" data-i18n-aria="chats"></nav>
+    <button class="side-link more" id="more-chats" type="button" hidden></button>
+
+    <div class="section"><span data-i18n="mediaSection">Media</span> <button id="open-gallery" type="button" data-i18n="mediaBrowse" data-i18n-title="mediaBrowseTitle">▦ browse</button></div>
+
+    <div class="section" data-i18n="manageSection">Manage</div>
+    <div class="side-links">
+      <button class="side-link" id="manage-prompts" type="button" data-i18n="managePrompts">✎ Suggested prompts</button>
+      <button class="side-link" id="manage-skills" type="button" data-i18n="manageSkills">⚙ Skills</button>
+    </div>
+
+    <div class="settings">
+      <span data-i18n="language">Language</span>
+      <div class="seg" id="lang-switch" role="group" data-i18n-aria="language">
+        <button type="button" data-lang="en">EN</button><button type="button" data-lang="zh">中文</button>
+      </div>
+      <span data-i18n="theme">Theme</span>
+      <div class="seg" id="theme-switch" role="group" data-i18n-aria="theme">
+        <button type="button" data-theme-value="light" data-i18n="themeLight">☀ Light</button><button type="button" data-theme-value="dark" data-i18n="themeDark">☾ Dark</button>
+      </div>
+    </div>
+
+    <div class="side-note" data-i18n="sideNote">Read-only checks run automatically. Motion and system changes wait for your approval. E-STOP stops the base and the arm immediately, without involving the agent.</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menu" type="button" data-i18n-aria="menuAria">☰</button>
+      <div id="title">Robot Agent</div>
+      <div class="seg mode-switch" id="mode-switch" role="group" data-i18n-aria="modeAria">
+        <button type="button" data-mode="sim" class="sim" data-i18n="modeSim">SIM</button><button type="button" data-mode="real" class="real" data-i18n="modeReal">REAL</button>
+      </div>
+      <div class="conn"><span class="light" id="conn-light"></span><span id="conn-label" data-i18n="connecting">Connecting…</span></div>
+      <button id="stop-turn" type="button" data-i18n="stopAgent" data-i18n-title="stopAgentTitle">■ Stop agent</button>
+      <button id="recover" type="button" data-i18n-title="recoverTitle" hidden><span aria-hidden="true">↺</span> <span class="lbl" data-i18n="recover">Recover arm</span></button>
+      <button id="estop" type="button" data-i18n="estop" data-i18n-title="estopTitle">E-STOP</button>
+    </header>
+    <section id="conversation" aria-live="polite"><div class="thread" id="thread"></div></section>
+    <div class="composer-wrap">
+      <form class="composer" id="form">
+        <textarea id="input" rows="1" data-i18n-placeholder="placeholder" data-i18n-aria="messageAria"></textarea>
+        <button id="send" type="submit" data-i18n-aria="sendAria" disabled>↑</button>
+      </form>
+      <div class="hint" data-i18n="hint">Enter to send · Shift+Enter for a new line · The agent's commands and their results are shown below each reply.</div>
+    </div>
+  </main>
+</div>
+<div class="scrim" id="scrim"></div>
+<div class="toast" id="toast"></div>
+<div class="modal-back" id="modal-back"></div>
+
+<div class="overlay" id="viewer" role="dialog" aria-modal="true" aria-label="Media viewer">
+  <div class="ov-head">
+    <span class="ov-title" id="viewer-title"></span>
+    <span class="ov-meta" id="viewer-meta"></span>
+    <a class="ov-btn" id="viewer-download" download data-i18n="download">⤓ Download</a>
+    <button class="ov-btn" id="viewer-close" type="button" data-i18n-title="close">✕</button>
+  </div>
+  <div class="ov-body" id="viewer-body"></div>
+  <div class="ov-tools" id="viewer-tools"></div>
+</div>
+
+<div class="overlay" id="gallery-overlay" role="dialog" aria-modal="true" aria-label="Media browser">
+  <div class="ov-head">
+    <span class="ov-title" data-i18n="mediaTitle">Media · artifacts/</span>
+    <div class="gallery-filters" id="gallery-filters"></div>
+    <button class="ov-btn" id="gallery-refresh" type="button">↻</button>
+    <button class="ov-btn" id="gallery-close" type="button" data-i18n-title="close">✕</button>
+  </div>
+  <div class="gallery" id="gallery"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const thread = $("thread"), conversation = $("conversation"), input = $("input"), sendBtn = $("send");
+
+const params = new URLSearchParams(location.search);
+if (params.get("token")) sessionStorage.setItem("robotToken", params.get("token"));
+const TOKEN = sessionStorage.getItem("robotToken") || "";
+const withToken = (url) => TOKEN ? url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : url;
+const api = (path, opts = {}) => fetch(path, { ...opts, headers: { ...(opts.headers || {}), ...(TOKEN ? { "X-Robot-Token": TOKEN } : {}) } });
+
+// B2 motors are safe below this temperature (matches MOTOR_HOT_C in robot_tools/base.py).
+const MOTOR_SAFE_C = 70;
+
+// ---------- i18n ----------
+const I18N = {
+  en: {
+    appName: "Robot Agent", brandTag: "Unitree B2 Assistant", newChat: "＋ New chat", robot: "Robot", refresh: "↻ refresh", refreshTitle: "Refresh robot status",
+    loadingStatus: "Loading status…", chats: "Chats", language: "Language", theme: "Theme", themeLight: "☀ Light", themeDark: "☾ Dark",
+    sideNote: "Read-only checks run automatically. Motion and system changes wait for your approval. E-STOP stops the base and the arm immediately, without involving the agent.",
+    menuAria: "Open chats and robot status", connecting: "Connecting…", connected: "Connected", reconnecting: "Reconnecting…",
+    unauthorized: "Unauthorized (add ?token=…)", stopAgent: "■ Stop agent", stopAgentTitle: "Interrupt the agent",
+    estop: "E-STOP", estopTitle: "Stop the base and the arm now", placeholder: "Ask the Robot Agent…", messageAria: "Message", sendAria: "Send",
+    hint: "Enter to send · Shift+Enter for a new line · The agent's commands and their results are shown below each reply.",
+    welcomeTitle: "What should the robot do in the field?",
+    welcomeText: "The agent uses skills to check the B2 base and Piper arm, capture camera images and video clips, read logs, diagnose problems, move the robot, teach and replay arm motions, build maps and save lidar point clouds. You approve every motion.",
+    suggestions: [
+      ["Status", "Check the robot's overall health and summarise any problems."],
+      ["Cameras", "Capture images from all cameras and describe what the robot sees."],
+      ["Logs", "Inspect the robot logs from the last hour and explain any errors."],
+      ["Arm", "Report the state of the arm, then move joint 1 by 15 degrees and back."],
+      ["Teach a motion", "Record a 15 second arm trajectory named pick_1 - I will press the teach button and guide the arm by hand."],
+      ["Replay a motion", "Check the arm and the space around it, then replay the arm trajectory pick_1 at half speed."],
+      ["Plant survey", "Run a plant survey: replay the survey arm motion and record a 20 second video with the Gemini camera."],
+      ["Base", "Stand the B2 up and walk forward half a metre, checking the path with the front camera first."],
+      ["Mapping", "Start mapping this area, explore it in small steps, and save the map as field_1."],
+      ["Crops", "Look at the crop row beside the robot with the arm camera and report plant health and ripe fruit."],
+      ["Video & 3D", "Record a 5 second clip from the front camera and save a lidar point cloud scan."],
+    ],
+    working: "Agent is working…", usingSkill: "✦ Using skill: {name}", viewedImage: "Agent viewed image: {path}",
+    safetyAllow: "auto-approved", safetyAsk: "needs approval", safetyDeny: "blocked",
+    running: "running", waiting: "waiting for you", declined: "declined", failed: "failed",
+    approvedDone: "approved · done", autoDone: "auto-approved · done", done: "done",
+    blockedBy: "Blocked by safety policy: {reason}", output: "Output ({n} line{s})",
+    motionTitle: "⚠ Robot motion requested", systemTitle: "System change requested", reviewTitle: "Review this command",
+    defaultReason: "This command is not on the read-only list.", notePlaceholder: "Optional note to the agent (e.g. why you declined)",
+    approve: "Approve", decline: "Decline", autoDecline: "auto-declines in {n}s", expired: "expired",
+    approvedBy: "✓ Approved by operator", declinedBy: "✕ Declined", steps: "{n} step{s}",
+    defaultChatTitle: "New chat", deleteChat: "Delete chat", createFailed: "Could not create chat: {err}",
+    deleteFailed: "Could not delete chat", notConnected: "Not connected",
+    estopSent: "E-STOP sent", estopPartial: "E-STOP: some stops failed", estopNotice: "E-STOP: {out}",
+    estopFailed: "E-STOP request failed - use the hardware stop!",
+    recover: "Recover arm", recovering: "Recovering…", recoverTitle: "Recover the arm from the emergency stop (./robot arm take-control)",
+    confirmRecover: "Recover the arm from the emergency stop?\n\nThe arm stays stopped and sinks slowly until it rests folded (joints 2, 3 and 5), then it is re-enabled in CAN command mode and holds its pose. This can take up to a minute.\n\nKeep hands and objects clear. If it stops short, guide it to rest by hand. Press E-STOP to cancel.",
+    recoverOk: "Arm recovered: {out}", recoverFailed: "Arm recovery failed: {out}",
+    statusUnavailable: "Status unavailable", unknownError: "unknown error", allOk: "All systems OK", issues: "{n} issue{s}",
+    b2Base: "B2 base", offline: "offline", battery: "Battery", arm: "Arm", cameras: "Cameras",
+    maxTemp: "Temperature", maxTempTitle: "Hottest B2 leg motor (safe < {limit} °C)",
+    modeAria: "Robot mode", modeSim: "SIM", modeReal: "REAL", modeTitle: "Robot mode: {mode} · model: {model}",
+    modeSimTitle: "Simulation: commands return simulated data and never move hardware",
+    modeRealTitle: "Real hardware: commands move the B2 base and the arm",
+    modeBusy: "Stop the agent before switching the robot mode",
+    modeLocked: "The robot mode is locked on this server",
+    confirmReal: "Switch to REAL mode?\n\nThe agent will control the real B2 base and arm hardware.",
+    confirmSim: "Switch to SIM mode?\n\nRobot commands will return simulated data and will not move the hardware.",
+    modeSwitched: "Robot mode switched to {mode}.", modeFailed: "Could not switch the robot mode: {err}",
+    modeNotice: "Robot mode switched to {mode}. The agent is told with your next message.",
+    modeNameSim: "SIM (simulation)", modeNameReal: "REAL (hardware)",
+  },
+  zh: {
+    appName: "机器人助手", brandTag: "Unitree B2 Assistant", newChat: "＋ 新建会话", robot: "机器人", refresh: "↻ 刷新", refreshTitle: "刷新机器人状态",
+    loadingStatus: "正在加载状态…", chats: "会话", language: "语言", theme: "主题", themeLight: "☀ 浅色", themeDark: "☾ 深色",
+    sideNote: "只读检查会自动执行；运动和系统变更需要你批准。急停会立即停止机器狗本体和机械臂，不经过智能体。",
+    menuAria: "打开会话和机器人状态", connecting: "连接中…", connected: "已连接", reconnecting: "正在重连…",
+    unauthorized: "未授权（请添加 ?token=…）", stopAgent: "■ 停止智能体", stopAgentTitle: "中断智能体",
+    estop: "急停", estopTitle: "立即停止本体和机械臂", placeholder: "向机器人助手提问…", messageAria: "消息", sendAria: "发送",
+    hint: "Enter 发送 · Shift+Enter 换行 · 智能体执行的命令及结果显示在每条回复下方。",
+    welcomeTitle: "需要机器人在田间做什么？",
+    welcomeText: "智能体通过技能检查 B2 本体和 Piper 机械臂、拍摄相机图像和视频片段、读取日志、诊断问题、控制机器人运动、示教并回放机械臂动作、建图并保存激光雷达点云。每一次运动都需要你批准。",
+    suggestions: [
+      ["状态", "检查机器人的整体健康状况，并总结存在的问题。"],
+      ["相机", "从所有相机拍摄图像，并描述机器人看到的场景。"],
+      ["日志", "检查最近一小时的机器人日志，并解释其中的错误。"],
+      ["机械臂", "报告机械臂的状态，然后将关节 1 转动 15 度再转回。"],
+      ["示教录制", "录制一条 15 秒的机械臂轨迹，命名为 pick_1：我会按下示教按钮并用手引导机械臂。"],
+      ["轨迹回放", "检查机械臂状态和周围空间，然后以半速回放机械臂轨迹 pick_1。"],
+      ["植株巡检", "进行植株巡检：回放机械臂巡检动作，并用 Gemini 相机录制 20 秒视频。"],
+      ["本体", "让 B2 站起来并向前走半米，先用前置相机检查路径。"],
+      ["建图", "开始对这片区域建图，小步探索，并把地图保存为 field_1。"],
+      ["作物", "用机械臂相机查看机器人旁边的作物行，报告植株长势和成熟的果实。"],
+      ["视频与 3D", "用前置相机录制 5 秒视频，并保存一次激光雷达点云扫描。"],
+    ],
+    working: "智能体正在工作…", usingSkill: "✦ 使用技能：{name}", viewedImage: "智能体查看了图片：{path}",
+    safetyAllow: "自动批准", safetyAsk: "需要审批", safetyDeny: "已拦截",
+    running: "运行中", waiting: "等待你确认", declined: "已拒绝", failed: "失败",
+    approvedDone: "已批准 · 完成", autoDone: "自动批准 · 完成", done: "完成",
+    blockedBy: "被安全策略拦截：{reason}", output: "输出（{n} 行）",
+    motionTitle: "⚠ 请求机器人运动", systemTitle: "请求系统变更", reviewTitle: "请审核此命令",
+    defaultReason: "此命令不在只读命令列表中。", notePlaceholder: "给智能体的备注（可选，例如拒绝原因）",
+    approve: "批准", decline: "拒绝", autoDecline: "{n} 秒后自动拒绝", expired: "已过期",
+    approvedBy: "✓ 操作员已批准", declinedBy: "✕ 已拒绝", steps: "{n} 步",
+    defaultChatTitle: "新会话", deleteChat: "删除会话", createFailed: "无法创建会话：{err}",
+    deleteFailed: "无法删除会话", notConnected: "未连接",
+    estopSent: "急停已发送", estopPartial: "急停：部分停止指令失败", estopNotice: "急停：{out}",
+    estopFailed: "急停请求失败——请使用硬件急停！",
+    recover: "恢复机械臂", recovering: "正在恢复…", recoverTitle: "解除机械臂急停（./robot arm take-control）",
+    confirmRecover: "解除机械臂急停？\n\n机械臂保持急停并缓慢下沉，直到折叠回到静止位（关节 2、3、5），然后以 CAN 指令模式重新使能并保持姿态。最长约需一分钟。\n\n请让手和物体远离机械臂。如果未能到位，请用手引导到静止位。按急停可取消。",
+    recoverOk: "机械臂已恢复：{out}", recoverFailed: "机械臂恢复失败：{out}",
+    statusUnavailable: "状态不可用", unknownError: "未知错误", allOk: "所有系统正常", issues: "{n} 个问题",
+    b2Base: "B2 本体", offline: "离线", battery: "电量", arm: "机械臂", cameras: "相机",
+    maxTemp: "温度", maxTempTitle: "B2 腿部电机最高温度（安全值 < {limit} °C）",
+    modeAria: "机器人模式", modeSim: "仿真", modeReal: "真机", modeTitle: "机器人模式：{mode} · 模型：{model}",
+    modeSimTitle: "仿真模式：命令返回模拟数据，不会驱动硬件",
+    modeRealTitle: "真机模式：命令会驱动 B2 本体和机械臂",
+    modeBusy: "切换机器人模式前请先停止智能体",
+    modeLocked: "此服务器已锁定机器人模式",
+    confirmReal: "切换到真机模式？\n\n智能体将控制真实的 B2 本体和机械臂硬件。",
+    confirmSim: "切换到仿真模式？\n\n机器人命令将返回模拟数据，不会驱动硬件。",
+    modeSwitched: "机器人模式已切换为{mode}。", modeFailed: "无法切换机器人模式：{err}",
+    modeNotice: "机器人模式已切换为{mode}。智能体会在你的下一条消息中收到通知。",
+    modeNameSim: "仿真", modeNameReal: "真机",
+  },
+};
+// Media viewer strings, merged into I18N.
+const MEDIA_I18N = {
+  en: {
+    mediaSection: "Media", mediaBrowse: "▦ browse", mediaBrowseTitle: "Browse captured images, videos and point clouds",
+    mediaTitle: "Media · artifacts/", mediaAll: "All", mediaImages: "Images", mediaVideos: "Videos", mediaClouds: "Point clouds",
+    mediaEmpty: "No media files yet. Captures, videos and point clouds saved under artifacts/ appear here.",
+    mediaLoadFailed: "Could not load media: {err}", download: "⤓ Download", close: "Close (Esc)", expand: "Open full screen",
+    kindImage: "image", kindVideo: "video", kindCloud: "3D point cloud", openCloud: "Click to view in 3D",
+    videoUnsupported: "This browser cannot play this video. Save MP4 files with the H.264 (avc1) codec.",
+    cloudFailed: "Could not show the point cloud: {err}", cloudLoading: "Loading point cloud…",
+    webglMissing: "WebGL is not available in this browser.",
+    points: "{n} points", colorBy: "Colour", colorRgb: "RGB", colorHeight: "Height", colorIntensity: "Intensity",
+    pointSize: "Point size", grid: "Grid", resetView: "Reset view",
+    cloudHint: "Drag to rotate · right-drag to pan · scroll to zoom", navHint: "← → to browse · Esc to close",
+  },
+  zh: {
+    mediaSection: "媒体", mediaBrowse: "▦ 浏览", mediaBrowseTitle: "浏览拍摄的图片、视频和点云",
+    mediaTitle: "媒体 · artifacts/", mediaAll: "全部", mediaImages: "图片", mediaVideos: "视频", mediaClouds: "点云",
+    mediaEmpty: "暂无媒体文件。保存在 artifacts/ 下的图片、视频和点云会显示在这里。",
+    mediaLoadFailed: "无法加载媒体：{err}", download: "⤓ 下载", close: "关闭（Esc）", expand: "全屏查看",
+    kindImage: "图片", kindVideo: "视频", kindCloud: "3D 点云", openCloud: "点击以 3D 查看",
+    videoUnsupported: "浏览器无法播放此视频。请使用 H.264（avc1）编码保存 MP4。",
+    cloudFailed: "无法显示点云：{err}", cloudLoading: "正在加载点云…",
+    webglMissing: "此浏览器不支持 WebGL。",
+    points: "{n} 个点", colorBy: "着色", colorRgb: "RGB", colorHeight: "高度", colorIntensity: "强度",
+    pointSize: "点大小", grid: "网格", resetView: "重置视角",
+    cloudHint: "拖动旋转 · 右键拖动平移 · 滚轮缩放", navHint: "← → 切换 · Esc 关闭",
+  },
+};
+for (const l of Object.keys(MEDIA_I18N)) I18N[l] = { ...MEDIA_I18N[l], ...(I18N[l] || {}) };
+// Chat history, suggested-prompt and skill management strings, merged into I18N.
+const MANAGE_I18N = {
+  en: {
+    moreChats: "⋯ All chats ({n})", allChatsTitle: "All chats", searchChats: "Search chats…", noChatsMatch: "No chats match.",
+    manageSection: "Manage", managePrompts: "✎ Suggested prompts", manageSkills: "⚙ Skills",
+    close: "Close (Esc)", cancel: "Cancel", save: "Save", saving: "Saving…", saved: "Saved", saveFailed: "Could not save: {err}",
+    loadFailed: "Could not load: {err}", confirmDiscard: "Discard your unsaved changes?",
+    promptsTitle: "Suggested prompts",
+    promptsHelp: "The cards on the welcome screen of an empty chat. Each language has its own list; changes are saved on the robot and shown to every operator.",
+    promptsLang: "Language", promptLabel: "Label", promptText: "Prompt sent to the agent", addPrompt: "＋ Add prompt",
+    resetPrompts: "Reset to built-in prompts", confirmResetPrompts: "Replace the {lang} prompts with the built-in ones?",
+    promptsCustom: "customized", promptsBuiltin: "built-in", moveUp: "Move up", moveDown: "Move down", remove: "Remove",
+    promptsInvalid: "Every prompt needs a label and a text.", promptsEmpty: "No prompts. The welcome screen will show none.",
+    skillsTitle: "Skills",
+    skillsHelp: "Robot skills the agent can load (.claude/skills/NAME/SKILL.md). The front matter 'description' tells the agent when to use a skill. Changes apply in each chat from its next message.",
+    newSkill: "＋ New skill", skillName: "Name", skillOn: "enabled", skillOff: "disabled", enable: "Enable", disable: "Disable",
+    deleteSkill: "Delete", confirmDeleteSkill: "Delete the skill \"{name}\"? Its folder is removed permanently.",
+    confirmDisableSkill: "Disable \"{name}\"? The agent will no longer be able to use it.",
+    skillDeleted: "Skill {name} deleted", skillEnabled: "Skill {name} enabled", skillDisabled: "Skill {name} disabled",
+    selectSkill: "Select a skill to view or edit it.", noSkills: "No skills found.", skillNameHint: "lowercase-name",
+  },
+  zh: {
+    moreChats: "⋯ 全部会话（{n}）", allChatsTitle: "全部会话", searchChats: "搜索会话…", noChatsMatch: "没有匹配的会话。",
+    manageSection: "管理", managePrompts: "✎ 建议提示词", manageSkills: "⚙ 技能",
+    close: "关闭（Esc）", cancel: "取消", save: "保存", saving: "正在保存…", saved: "已保存", saveFailed: "保存失败：{err}",
+    loadFailed: "加载失败：{err}", confirmDiscard: "放弃未保存的修改？",
+    promptsTitle: "建议提示词",
+    promptsHelp: "空会话欢迎页上的卡片。每种语言单独一组；修改保存在机器人上，所有操作员都能看到。",
+    promptsLang: "语言", promptLabel: "标题", promptText: "发送给智能体的提示词", addPrompt: "＋ 添加提示词",
+    resetPrompts: "恢复内置提示词", confirmResetPrompts: "用内置提示词替换{lang}提示词？",
+    promptsCustom: "已自定义", promptsBuiltin: "内置", moveUp: "上移", moveDown: "下移", remove: "删除",
+    promptsInvalid: "每条提示词都需要标题和内容。", promptsEmpty: "没有提示词，欢迎页将不显示卡片。",
+    skillsTitle: "技能",
+    skillsHelp: "智能体可加载的机器人技能（.claude/skills/名称/SKILL.md）。front matter 中的 description 决定智能体何时使用该技能。修改从每个会话的下一条消息起生效。",
+    newSkill: "＋ 新建技能", skillName: "名称", skillOn: "已启用", skillOff: "已停用", enable: "启用", disable: "停用",
+    deleteSkill: "删除", confirmDeleteSkill: "删除技能“{name}”？其文件夹将被永久删除。",
+    confirmDisableSkill: "停用“{name}”？智能体将无法再使用该技能。",
+    skillDeleted: "已删除技能 {name}", skillEnabled: "已启用技能 {name}", skillDisabled: "已停用技能 {name}",
+    selectSkill: "选择一个技能以查看或编辑。", noSkills: "没有找到技能。", skillNameHint: "小写名称",
+  },
+};
+for (const l of Object.keys(MANAGE_I18N)) I18N[l] = { ...MANAGE_I18N[l], ...(I18N[l] || {}) };
+
+let lang = localStorage.getItem("robotLang");
+if (!I18N[lang]) lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+function t(key, vars = {}) {
+  let s = I18N[lang][key] ?? I18N.en[key] ?? key;
+  if (typeof s !== "string") return s;
+  if (vars.n !== undefined && vars.s === undefined) vars = { ...vars, s: vars.n === 1 ? "" : "s" };
+  return s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+}
+function applyStaticText() {
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.title = t("appName");
+  for (const e of document.querySelectorAll("[data-i18n]")) e.textContent = t(e.dataset.i18n);
+  for (const e of document.querySelectorAll("[data-i18n-title]")) e.title = t(e.dataset.i18nTitle);
+  for (const e of document.querySelectorAll("[data-i18n-placeholder]")) e.placeholder = t(e.dataset.i18nPlaceholder);
+  for (const e of document.querySelectorAll("[data-i18n-aria]")) e.setAttribute("aria-label", t(e.dataset.i18nAria));
+  for (const b of document.querySelectorAll("#lang-switch button")) b.classList.toggle("on", b.dataset.lang === lang);
+}
+function setLang(value) {
+  if (!I18N[value] || value === lang) return;
+  lang = value; localStorage.setItem("robotLang", lang);
+  applyStaticText(); renderChats(); renderStatus(); renderMode();
+  if (modal) modal.render();
+  if (currentChat && wsSend({ type: "subscribe", chatId: currentChat })) return; // re-renders the chat
+  if (thread.querySelector(".welcome")) showWelcome();
+  workingIndicator();
+}
+
+// ---------- theme ----------
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  for (const b of document.querySelectorAll("#theme-switch button")) b.classList.toggle("on", b.dataset.themeValue === theme);
+}
+function setTheme(theme) { localStorage.setItem("robotTheme", theme); applyTheme(theme); }
+
+let ws = null, chats = [], currentChat = null, busy = false, approvalTimeout = 120;
+let modal = null;          // open dialog: { kind, dirty(), render() }
+let customSuggestions = {}; // lang -> [{label, text}] saved on the server
+let robotMode = "", modelName = "", lastStatus = null, modeLocked = false;
+let toolCards = {};        // toolUseId -> card element
+let seenTools = new Set(); // toolUseIds already rendered (gateways may repeat a call)
+let pendingApprovals = {}; // approvalId -> card element
+let timers = {};
+
+// ---------- markdown (escaped, minimal) ----------
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function inline(s) {
+  return s.replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+          .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+}
+function markdown(src) {
+  const lines = esc(src).split("\n");
+  let html = "", i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("```")) {
+      const buf = []; i++;
+      while (i < lines.length && !lines[i].startsWith("```")) buf.push(lines[i++]);
+      i++; html += `<pre><code>${buf.join("\n")}</code></pre>`; continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      const row = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
+      let t = "<table><tr>" + row(line).map((c) => `<th>${c}</th>`).join("") + "</tr>";
+      i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) t += "<tr>" + row(lines[i++]).map((c) => `<td>${c}</td>`).join("") + "</tr>";
+      html += t + "</table>"; continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { html += `<h${h[1].length + 1}>${inline(h[2])}</h${h[1].length + 1}>`; i++; continue; }
+    if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+      const ordered = /^\s*\d+\./.test(line); const tag = ordered ? "ol" : "ul"; let items = "";
+      while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) items += `<li>${inline(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, ""))}</li>`;
+      html += `<${tag}>${items}</${tag}>`; continue;
+    }
+    if (!line.trim()) { i++; continue; }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^(```|#{1,4}\s|\s*([-*]|\d+\.)\s|\s*\|)/.test(lines[i])) para.push(lines[i++]);
+    if (!para.length) para.push(lines[i++]);
+    html += `<p>${inline(para.join("<br>"))}</p>`;
+  }
+  return html;
+}
+
+// ---------- rendering ----------
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
+function scrollDown() { conversation.scrollTop = conversation.scrollHeight; }
+function workingIndicator() {
+  let w = $("working");
+  if (!w) { w = el("div", "working", '<span class="spinner"></span><span></span>'); w.id = "working"; }
+  w.lastChild.textContent = t("working");
+  thread.appendChild(w); return w;
+}
+function setBusy(value) {
+  busy = value;
+  $("stop-turn").style.display = value ? "inline-block" : "none";
+  workingIndicator().classList.toggle("show", value);
+  sendBtn.disabled = value || !input.value.trim() || !currentChat;
+  renderMode();
+  scrollDown();
+}
+
+function showWelcome() {
+  thread.replaceChildren();
+  const w = el("div", "welcome", `${FIELD_ART}<h1>${esc(t("welcomeTitle"))}</h1><p>${esc(t("welcomeText"))}</p>`);
+  const grid = el("div", "suggestions");
+  for (const { label, text } of suggestionsFor(lang)) {
+    const b = el("button", "suggestion", `<b>${esc(label)}</b>${esc(text)}`); b.type = "button";
+    b.onclick = () => { input.value = text; resize(); input.focus(); };
+    grid.appendChild(b);
+  }
+  w.appendChild(grid); thread.appendChild(w);
+}
+
+const SPROUT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Agent"><path d="M12 21v-8"/><path d="M12 13c0-4 2.6-6.5 7-6.5 0 4.2-2.7 6.5-7 6.5z" fill="currentColor" fill-opacity=".35"/><path d="M12 15c0-3.4-2.2-5.5-6-5.5 0 3.5 2.3 5.5 6 5.5z" fill="currentColor" fill-opacity=".35"/></svg>`;
+const FIELD_ART = `<svg class="welcome-art" viewBox="0 0 132 84" aria-hidden="true">
+  <defs><linearGradient id="wa-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe8b8"/><stop offset="1" stop-color="#f4f0d6"/></linearGradient></defs>
+  <rect x="2" y="2" width="128" height="80" rx="18" fill="url(#wa-sky)"/>
+  <circle cx="104" cy="22" r="9" fill="#f2c45a"/>
+  <path d="M2 50 Q40 38 70 46 T130 44 V64 H2z" fill="#9fcf73"/>
+  <path d="M2 58 L130 52 V82 H2z" fill="#8a5d3a"/>
+  <g stroke="#6b4428" stroke-width="1.4" opacity=".55"><path d="M10 82 L52 56"/><path d="M40 82 L62 55"/><path d="M74 82 L72 55"/><path d="M106 82 L84 54"/></g>
+  <g fill="#4f9a2f"><path d="M30 68c0-5 3-8 8-8 0 5-3 8-8 8z"/><path d="M30 68c0-4-2.6-6.5-7-6.5 0 4 2.6 6.5 7 6.5z"/>
+  <path d="M62 64c0-4 2.4-6.4 6.4-6.4 0 4-2.4 6.4-6.4 6.4z"/><path d="M62 64c0-3.2-2-5.2-5.6-5.2 0 3.2 2 5.2 5.6 5.2z"/>
+  <path d="M94 67c0-4.6 2.8-7.4 7.4-7.4 0 4.6-2.8 7.4-7.4 7.4z"/><path d="M94 67c0-3.7-2.4-6-6.4-6 0 3.7 2.4 6 6.4 6z"/></g>
+  <g fill="#3d7a26"><rect x="29.3" y="66" width="1.4" height="8" rx=".7"/><rect x="61.3" y="62" width="1.4" height="7" rx=".7"/><rect x="93.3" y="65" width="1.4" height="8" rx=".7"/></g>
+</svg>`;
+const USER_AVATAR = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-label="You"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c0-4.4 3.8-7.5 8.5-7.5s8.5 3.1 8.5 7.5z"/></svg>`;
+
+function addMessage(role, text) {
+  thread.querySelector(".welcome")?.remove();
+  const m = el("div", `msg ${role}`);
+  m.appendChild(el("div", "avatar", role === "user" ? USER_AVATAR : SPROUT));
+  const body = el("div", "msg-body" + (role === "assistant" ? " md" : ""));
+  if (role === "assistant") body.innerHTML = markdown(text); else body.textContent = text;
+  m.appendChild(body); thread.appendChild(m); workingIndicator(); return m;
+}
+
+function addNotice(text, level = "error") {
+  thread.querySelector(".welcome")?.remove();
+  thread.appendChild(el("div", `notice ${level}`, esc(text))); workingIndicator(); scrollDown();
+}
+
+const SAFETY_LABEL = { allow: "safetyAllow", ask: "safetyAsk", deny: "safetyDeny" };
+function toolCard(ev) {
+  const inputData = ev.input || {};
+  if (ev.id && seenTools.has(ev.id)) return toolCards[ev.id] || null;
+  if (ev.id) seenTools.add(ev.id);
+  if (ev.name === "Skill") {
+    thread.appendChild(el("div", "skill-chip", esc(t("usingSkill", { name: inputData.skill || inputData.name || "skill" }))));
+    workingIndicator(); return null;
+  }
+  const card = el("div", "tool");
+  const head = el("div", "tool-head");
+  const desc = ev.name === "Bash" ? inputData.description || "" :
+    ev.name === "Read" ? inputData.file_path || "" : JSON.stringify(inputData).slice(0, 140);
+  head.innerHTML = `<span class="tool-name">${esc(ev.name)}</span><span class="tool-desc">${esc(desc)}</span><span class="badge running">${esc(t("running"))}</span>`;
+  card.appendChild(head);
+  if (ev.name === "Bash") card.appendChild(el("pre", "tool-cmd mono", esc(inputData.command || "")));
+  if (ev.name === "Read" && /\.(jpe?g|png)$/i.test(inputData.file_path || "")) {
+    head.querySelector(".tool-desc").textContent = t("viewedImage", { path: inputData.file_path });
+  }
+  thread.appendChild(card); workingIndicator();
+  toolCards[ev.id] = card; return card;
+}
+
+function setBadge(card, cls, text) {
+  const b = card?.querySelector(".tool-head .badge"); if (!b) return;
+  b.className = `badge ${cls}`; b.textContent = text;
+}
+
+function applySafety(ev) {
+  const card = toolCards[ev.toolUseId]; if (!card) return;
+  card.dataset.safety = ev.action;
+  setBadge(card, ev.action, SAFETY_LABEL[ev.action] ? t(SAFETY_LABEL[ev.action]) : ev.action);
+  if (ev.action === "deny") card.appendChild(el("div", "approval-done no", esc(t("blockedBy", { reason: ev.reason }))));
+}
+
+function applyResult(ev) {
+  const card = toolCards[ev.toolUseId]; if (!card || card.dataset.result) return;
+  card.dataset.result = "1";
+  if (card.dataset.safety !== "deny" && card.dataset.declined !== "1") {
+    if (ev.isError) setBadge(card, "error", t("failed"));
+    else if (card.dataset.safety === "ask") setBadge(card, "allow", t("approvedDone"));
+    else setBadge(card, "allow", t(card.dataset.safety === "allow" ? "autoDone" : "done"));
+  }
+  const media = ev.media || (ev.images || []).map((url) => ({ url, kind: "image", name: url.split("/").pop() }));
+  if (media.length) card.appendChild(mediaStrip(media));
+  if (ev.output && ev.output.trim()) {
+    const d = el("details", "out");
+    const lines = ev.output.split("\n").length;
+    d.innerHTML = `<summary>${esc(t("output", { n: lines }))}</summary><pre class="mono">${esc(ev.output)}</pre>`;
+    if (ev.isError || (lines <= 6 && !media.length)) d.open = true;
+    card.appendChild(d);
+  }
+  scrollDown();
+}
+
+function approvalCard(ev, live) {
+  let card = toolCards[ev.toolUseId];
+  if (!card) { seenTools.delete(ev.toolUseId); card = toolCard({ id: ev.toolUseId, name: ev.tool, input: ev.input || {} }); }
+  if (!card) { card = el("div", "tool"); thread.appendChild(card); toolCards[ev.toolUseId] = card; }
+  setBadge(card, "ask", t("waiting"));
+  const box = el("div", `approval ${esc(ev.category)}`);
+  const title = t(ev.category === "motion" ? "motionTitle" : ev.category === "system" ? "systemTitle" : "reviewTitle");
+  box.innerHTML = `<h4>${esc(title)}</h4><p>${esc(ev.reason || t("defaultReason"))}</p>`;
+  const actions = el("div", "approval-actions");
+  const note = el("input"); note.placeholder = t("notePlaceholder");
+  const yes = el("button", "btn-approve", esc(t("approve"))); yes.type = "button";
+  const no = el("button", "btn-decline", esc(t("decline"))); no.type = "button";
+  const cd = el("span", "countdown");
+  actions.append(yes, no, note, cd); box.appendChild(actions); card.appendChild(box);
+  pendingApprovals[ev.id] = box;
+  const send = (approve) => {
+    wsSend({ type: "approval", chatId: currentChat, id: ev.id, approve, note: note.value });
+    yes.disabled = no.disabled = true;
+  };
+  yes.onclick = () => send(true); no.onclick = () => send(false);
+  if (live) {
+    const deadline = new Date(ev.ts).getTime() + (ev.timeout || approvalTimeout) * 1000;
+    const tick = () => {
+      const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      cd.textContent = t("autoDecline", { n: left });
+      if (left <= 0) clearInterval(timers[ev.id]);
+    };
+    tick(); timers[ev.id] = setInterval(tick, 1000);
+    yes.focus({ preventScroll: true });
+  } else {
+    yes.disabled = no.disabled = true; cd.textContent = t("expired");
+  }
+  scrollDown();
+}
+
+function approvalResult(ev) {
+  const box = pendingApprovals[ev.id]; clearInterval(timers[ev.id]);
+  if (!box) return;
+  const card = box.parentElement;
+  box.replaceWith(el("div", `approval-done ${ev.approved ? "yes" : "no"}`,
+    esc(ev.approved ? t("approvedBy") : t("declinedBy") + (ev.note ? ": " + ev.note : ""))));
+  if (!ev.approved) { setBadge(card, "deny", t("declined")); card.dataset.declined = "1"; }
+  else setBadge(card, "running", t("running"));
+  delete pendingApprovals[ev.id];
+}
+
+function renderEvent(ev, live = true) {
+  switch (ev.type) {
+    case "user": addMessage("user", ev.text); if (live) setBusy(true); break;
+    case "assistant": addMessage("assistant", ev.text); break;
+    case "tool_use": toolCard(ev); break;
+    case "safety": applySafety(ev); break;
+    case "tool_result": applyResult(ev); break;
+    case "approval_request": approvalCard(ev, live); break;
+    case "approval_result": approvalResult(ev); break;
+    case "error": addNotice(ev.text, "error"); break;
+    case "mode": addNotice(t("modeNotice", { mode: modeName(ev.mode) }), "warning"); break;
+    case "result": {
+      const parts = [];
+      if (ev.durationMs) parts.push(`${(ev.durationMs / 1000).toFixed(1)}s`);
+      if (ev.turns) parts.push(t("steps", { n: ev.turns }));
+      if (parts.length) { thread.appendChild(el("div", "result-line", parts.join(" · "))); workingIndicator(); }
+      break;
+    }
+    case "done": if (live) setBusy(false); break;
+  }
+  scrollDown();
+}
+
+function renderHistory(events, isBusy) {
+  thread.replaceChildren(); toolCards = {}; seenTools = new Set(); pendingApprovals = {};
+  Object.values(timers).forEach(clearInterval); timers = {};
+  if (!events.length) { showWelcome(); setBusy(false); return; }
+  const resolved = new Set(events.filter((e) => e.type === "approval_result").map((e) => e.id));
+  for (const ev of events) {
+    renderEvent(ev, ev.type === "approval_request" ? isBusy && !resolved.has(ev.id) : false);
+  }
+  setBusy(isBusy);
+}
+
+// ---------- chats ----------
+const SIDEBAR_CHATS = 5;
+function chatRow(c, cls, onOpen) {
+  const row = el("div", cls + (c.id === currentChat ? " active" : ""));
+  const title = chatTitle(c);
+  const open = el("button", "chat-open", `<span class="dot${c.busy ? " busy" : ""}"></span>${esc(title)}`);
+  open.type = "button"; open.title = title; open.onclick = () => { onOpen?.(); selectChat(c.id); };
+  const del = el("button", "chat-del", "×"); del.type = "button"; del.title = t("deleteChat");
+  del.onclick = () => deleteChat(c.id);
+  row.append(open, del);
+  return { row, open, del };
+}
+function renderChats() {
+  const list = $("chat-list"); list.replaceChildren();
+  // The most recent chats; the open chat stays visible even when it is older.
+  let shown = chats.slice(0, SIDEBAR_CHATS);
+  const cur = chats.find((c) => c.id === currentChat);
+  if (cur && !shown.includes(cur)) shown = [...shown.slice(0, SIDEBAR_CHATS - 1), cur];
+  for (const c of shown) list.appendChild(chatRow(c, "chat-row").row);
+  const more = $("more-chats");
+  more.hidden = chats.length <= SIDEBAR_CHATS;
+  more.textContent = t("moreChats", { n: chats.length });
+  const current = chats.find((c) => c.id === currentChat);
+  $("title").textContent = current ? chatTitle(current) : t("appName");
+  renderMode();
+  if (modal?.kind === "chats") renderChatsModal();
+}
+function chatTitle(c) { return c.title === "New chat" ? t("defaultChatTitle") : c.title; }
+
+async function createChat() {
+  const res = await api("/api/chats", { method: "POST" });
+  if (!res.ok) return toast(t("createFailed", { err: res.status }), true);
+  const chat = await res.json();
+  chats.unshift(chat); selectChat(chat.id);
+}
+
+function selectChat(id) {
+  currentChat = id; renderChats(); toggleSidebar(false);
+  wsSend({ type: "subscribe", chatId: id });
+  input.focus();
+}
+
+async function deleteChat(id) {
+  const res = await api(`/api/chats/${id}`, { method: "DELETE" });
+  if (!res.ok) { const b = await res.json().catch(() => ({})); return toast(b.detail || t("deleteFailed"), true); }
+  if (id === currentChat) { currentChat = null; showWelcome(); setBusy(false); }
+}
+
+// ---------- websocket ----------
+function wsSend(msg) { if (ws?.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(msg)); return true; } return false; }
+
+function connect() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(withToken(`${proto}://${location.host}/ws`));
+  ws.onopen = () => {
+    setConn("ok", "connected");
+    if (currentChat) wsSend({ type: "subscribe", chatId: currentChat });
+    loadConfig();
+    loadSuggestions();
+  };
+  ws.onclose = (e) => {
+    setConn("bad", e.code === 4401 ? "unauthorized" : "reconnecting");
+    if (e.code !== 4401) setTimeout(connect, 2000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === "chats") {
+      chats = msg.chats; renderChats();
+      if (!currentChat && chats.length) selectChat(chats[0].id);
+      else if (!chats.length && !currentChat) createChat();
+      return;
+    }
+    if (msg.type === "history") { if (msg.chatId === currentChat) renderHistory(msg.events, msg.busy); return; }
+    if (msg.type === "estop") {
+      toast(t(msg.ok ? "estopSent" : "estopPartial") + "\n" + msg.output, !msg.ok);
+      addNotice(t("estopNotice", { out: msg.output }), "estop"); loadStatus(true); return;
+    }
+    if (msg.type === "mode" && !msg.chatId) { setMode(msg.mode); loadStatus(true); return; }
+    if (msg.type === "recover") {
+      const out = (msg.output || "").split("\n").filter((l) => /arm:|status:|error|Cancelled/i.test(l)).slice(0, 4).join("\n") || msg.output;
+      toast(t(msg.ok ? "recoverOk" : "recoverFailed", { out }), !msg.ok);
+      addNotice(t(msg.ok ? "recoverOk" : "recoverFailed", { out: msg.output }), msg.ok ? "ok" : "error");
+      loadStatus(true); return;
+    }
+    if (msg.type === "notice") { toast(msg.text, msg.level === "error"); return; }
+    if (msg.type === "suggestions") { setCustomSuggestions(msg.custom); return; }
+    if (msg.chatId && msg.chatId === currentChat) renderEvent(msg, true);
+  };
+}
+
+// ---------- robot status ----------
+function light(ok, warn) { return `<span class="light ${ok ? "ok" : warn ? "warn" : "bad"}"></span>`; }
+function setConn(state, key) { $("conn-light").className = "light " + state; $("conn-label").dataset.i18n = key; $("conn-label").textContent = t(key); }
+function maxMotorTemp(b) {
+  if (typeof b.max_motor_temp_c === "number") return b.max_motor_temp_c;
+  return Array.isArray(b.motor_temps_c) && b.motor_temps_c.length ? Math.max(...b.motor_temps_c) : null;
+}
+async function loadStatus(force = false) {
+  const card = $("status-card");
+  if (force) card.style.opacity = .6;
+  try {
+    const res = await api("/api/robot/status");
+    lastStatus = await res.json();
+  } catch (err) {
+    lastStatus = { error: String(err.message || err) };
+  }
+  card.style.opacity = 1;
+  renderStatus();
+}
+function renderStatus() {
+  const card = $("status-card"), s = lastStatus;
+  if (!s) return;
+  renderRecover();
+  if (s.error || !s.summary) {
+    card.innerHTML = `<div class="status-verdict">${light(false)}${esc(t("statusUnavailable"))}</div><div class="issues-text">${esc(s.error || s.detail || t("unknownError"))}</div>`;
+    return;
+  }
+  const b = s.base || {};
+  const rows = [];
+  rows.push([t("b2Base"), b.reachable ? `${light(!b.error_code)} ${esc(b.mode)}` : `${light(false)} ${esc(t("offline"))}`]);
+  if (b.reachable && b.battery_pct !== undefined) rows.push([t("battery"), `${light(b.battery_pct >= 25, b.battery_pct >= 15)} ${b.battery_pct}%`]);
+  const temp = b.reachable ? maxMotorTemp(b) : null;
+  if (temp !== null) rows.push([t("maxTemp"), `${light(temp < MOTOR_SAFE_C)} ${temp} °C`, t("maxTempTitle", { limit: MOTOR_SAFE_C })]);
+  if (s.arm) {
+    const a = s.arm;
+    rows.push([t("arm"), a.available ? `${light(a.healthy)} ${esc(a.arm_status)}` : `${light(false)} ${esc(t("offline"))}`]);
+  }
+  const cams = Object.entries(s.cameras || {}).filter(([, v]) => v !== "not configured");
+  const camOk = cams.filter(([, v]) => v === "ok").length;
+  rows.push([t("cameras"), `${light(camOk === cams.length, camOk > 0)} ${camOk}/${cams.length}`]);
+  const issues = s.summary.issues || [];
+  const verdict = s.summary.ok ? t("allOk") : t("issues", { n: issues.length });
+  card.innerHTML = `<div class="status-verdict">${light(s.summary.ok, issues.length < 3)}${esc(verdict)}</div>
+    <div class="status-grid">${rows.map(([k, v, title]) => `<span class="k"${title ? ` title="${esc(title)}"` : ""}>${esc(k)}</span><span class="v"${title ? ` title="${esc(title)}"` : ""}>${v}</span>`).join("")}</div>
+    ${issues.length ? `<ul class="issues">${issues.slice(0, 6).map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}`;
+}
+
+// ---------- robot mode (SIM / REAL) ----------
+function modeName(mode) { return t(mode === "sim" ? "modeNameSim" : "modeNameReal"); }
+function setMode(mode) { robotMode = String(mode || ""); renderMode(); }
+function renderMode() {
+  const anyBusy = busy || chats.some((c) => c.busy);
+  for (const b of document.querySelectorAll("#mode-switch button")) {
+    const on = b.dataset.mode === robotMode;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on);
+    b.disabled = !on && (anyBusy || modeLocked);
+    b.title = !on && modeLocked ? t("modeLocked")
+      : !on && anyBusy ? t("modeBusy") : t(b.dataset.mode === "sim" ? "modeSimTitle" : "modeRealTitle");
+  }
+  $("mode-switch").title = t("modeTitle", { mode: robotMode || "?", model: modelName || "?" });
+}
+async function switchMode(mode) {
+  if (mode === robotMode) return;
+  if (!confirm(t(mode === "real" ? "confirmReal" : "confirmSim"))) return;
+  try {
+    const res = await api("/api/mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return toast(t("modeFailed", { err: body.detail || res.status }), true);
+    setMode(body.mode); toast(t("modeSwitched", { mode: modeName(body.mode) })); loadStatus(true);
+  } catch (err) {
+    toast(t("modeFailed", { err: err.message || err }), true);
+  }
+}
+
+async function loadConfig() {
+  try {
+    const res = await api("/api/config"); const c = await res.json();
+    modelName = c.model || "";
+    approvalTimeout = c.approvalTimeout || approvalTimeout;
+    modeLocked = !!c.modeLocked;
+    setMode(c.mode);
+  } catch { /* shown via connection state */ }
+}
+
+// ---------- media: images, videos, point clouds ----------
+const KIND_TAG = { image: "kindImage", video: "kindVideo", pointcloud: "kindCloud" };
+const extOf = (name) => (String(name).split(".").pop() || "").toLowerCase();
+const nameOf = (m) => m.name || m.url.split("/").pop();
+function fmtSize(bytes) {
+  if (bytes === undefined) return "";
+  const u = ["B", "KB", "MB", "GB"]; let i = 0, n = bytes;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(i && n < 10 ? 1 : 0)} ${u[i]}`;
+}
+function videoError(video) {
+  video.replaceWith(el("div", "media-error", esc(t("videoUnsupported"))));
+}
+
+function mediaStrip(items) {
+  const box = el("div", "media");
+  items.forEach((m, i) => {
+    let tile;
+    if (m.kind === "video") {
+      tile = el("div", "media-tile");
+      const v = el("video"); v.controls = true; v.preload = "metadata"; v.playsInline = true;
+      v.src = withToken(m.url); v.onloadedmetadata = scrollDown; v.onerror = () => videoError(v);
+      const ex = el("button", "expand", "⤢"); ex.type = "button"; ex.title = t("expand");
+      ex.onclick = () => { const at = v.currentTime || 0; v.pause(); openViewer(items, i, at); };
+      tile.append(v, ex);
+    } else if (m.kind === "pointcloud") {
+      tile = el("button", "media-tile cloud-tile",
+        `<span class="icon">⬡</span><span class="nm">${esc(nameOf(m))}</span><span class="sz">${esc(t("kindCloud"))}${m.size ? " · " + fmtSize(m.size) : ""}</span><span class="sz">${esc(t("openCloud"))}</span>`);
+      tile.type = "button"; tile.onclick = () => openViewer(items, i);
+    } else {
+      tile = el("button", "media-tile"); tile.type = "button"; tile.title = nameOf(m);
+      const img = el("img"); img.src = withToken(m.url); img.alt = nameOf(m); img.loading = "lazy"; img.onload = scrollDown;
+      tile.appendChild(img); tile.onclick = () => openViewer(items, i);
+    }
+    box.appendChild(tile);
+  });
+  return box;
+}
+
+// Full-screen viewer
+let viewerItems = [], viewerIndex = 0, cloudHandle = null, cloudSeq = 0;
+const viewer = $("viewer"), viewerBody = $("viewer-body"), viewerTools = $("viewer-tools");
+
+function openViewer(items, index, startAt = 0) {
+  viewerItems = items; viewerIndex = index;
+  viewer.classList.add("open"); showViewerItem(startAt);
+}
+function clearViewer() {
+  cloudSeq++;
+  if (cloudHandle) { cloudHandle.dispose(); cloudHandle = null; }
+  viewerBody.replaceChildren(); viewerTools.replaceChildren();
+}
+function closeViewer() { clearViewer(); viewer.classList.remove("open"); }
+function stepViewer(delta) {
+  if (viewerItems.length < 2) return;
+  viewerIndex = (viewerIndex + delta + viewerItems.length) % viewerItems.length; showViewerItem();
+}
+
+function showViewerItem(startAt = 0) {
+  clearViewer();
+  const m = viewerItems[viewerIndex];
+  $("viewer-title").textContent = nameOf(m);
+  const when = m.mtime ? new Date(m.mtime * 1000).toLocaleString() : "";
+  $("viewer-meta").textContent = [t(KIND_TAG[m.kind] || "kindImage"), fmtSize(m.size), when,
+    viewerItems.length > 1 ? `${viewerIndex + 1}/${viewerItems.length}` : ""].filter(Boolean).join(" · ");
+  const dl = $("viewer-download"); dl.href = withToken(m.url); dl.download = nameOf(m);
+  if (viewerItems.length > 1) {
+    for (const [cls, label, d] of [["prev", "‹", -1], ["next", "›", 1]]) {
+      const b = el("button", `ov-nav ${cls}`, label); b.type = "button"; b.onclick = () => stepViewer(d);
+      viewerBody.appendChild(b);
+    }
+  }
+  if (m.kind === "video") {
+    const v = el("video"); v.controls = true; v.autoplay = true; v.playsInline = true; v.src = withToken(m.url);
+    if (startAt) v.addEventListener("loadedmetadata", () => { v.currentTime = startAt; }, { once: true });
+    v.onerror = () => { v.replaceWith(el("div", "ov-status", esc(t("videoUnsupported")))); };
+    viewerBody.appendChild(v);
+  } else if (m.kind === "pointcloud") {
+    renderCloud(m);
+  } else {
+    const img = el("img"); img.src = withToken(m.url); img.alt = nameOf(m);
+    viewerBody.appendChild(img);
+  }
+  if (viewerItems.length > 1 && m.kind !== "pointcloud") viewerTools.appendChild(el("span", "ov-hint", esc(t("navHint"))));
+}
+
+function hasWebGL() {
+  try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); }
+  catch { return false; }
+}
+
+async function renderCloud(m) {
+  const seq = cloudSeq;
+  const status = el("div", "ov-status", esc(t("cloudLoading")));
+  viewerBody.appendChild(status);
+  if (!hasWebGL()) { status.textContent = t("webglMissing"); return; }
+  try {
+    const { mountPointCloud } = await import("/static/pointcloud-viewer.js");
+    if (seq !== cloudSeq) return;
+    const handle = await mountPointCloud(viewerBody, {
+      url: withToken(m.url), ext: extOf(nameOf(m)),
+      onProgress: (p) => { if (seq === cloudSeq) status.textContent = `${t("cloudLoading")} ${Math.round(p * 100)}%`; },
+      onInfo: (info) => { if (seq === cloudSeq) { status.remove(); cloudToolbar(info); } },
+    });
+    if (seq !== cloudSeq) { handle.dispose(); return; }
+    cloudHandle = handle;
+  } catch (err) {
+    if (seq !== cloudSeq) return;
+    status.textContent = t("cloudFailed", { err: err?.message || err?.target?.status || String(err) });
+  }
+}
+
+function cloudToolbar(info) {
+  const dims = info.size.map((d) => d.toFixed(2)).join(" × ");
+  $("viewer-meta").textContent += ` · ${t("points", { n: info.points.toLocaleString() })} · ${dims} m`;
+  const labels = { rgb: "colorRgb", height: "colorHeight", intensity: "colorIntensity" };
+  const color = el("select");
+  for (const mode of info.colorModes) color.appendChild(new Option(t(labels[mode]), mode, false, mode === info.mode));
+  color.onchange = () => cloudHandle?.setColorMode(color.value);
+  const size = el("input"); size.type = "range"; size.min = "1"; size.max = "8"; size.step = "0.5"; size.value = "2";
+  size.oninput = () => cloudHandle?.setPointSize(Number(size.value));
+  const grid = el("button", "ov-btn on", esc(t("grid"))); grid.type = "button";
+  grid.onclick = () => { grid.classList.toggle("on"); cloudHandle?.toggleGrid(grid.classList.contains("on")); };
+  const reset = el("button", "ov-btn", esc(t("resetView"))); reset.type = "button"; reset.onclick = () => cloudHandle?.resetView();
+  viewerTools.append(el("span", "", esc(t("colorBy"))), color, el("span", "", esc(t("pointSize"))), size, grid, reset,
+    el("span", "ov-hint", esc(t("cloudHint") + (viewerItems.length > 1 ? " · " + t("navHint") : ""))));
+}
+
+// Media browser (everything under artifacts/)
+let galleryItems = [], galleryFilter = "all";
+const galleryOverlay = $("gallery-overlay");
+
+function renderGalleryFilters() {
+  const box = $("gallery-filters"); box.replaceChildren();
+  for (const [key, label] of [["all", "mediaAll"], ["image", "mediaImages"], ["video", "mediaVideos"], ["pointcloud", "mediaClouds"]]) {
+    const n = key === "all" ? galleryItems.length : galleryItems.filter((m) => m.kind === key).length;
+    const b = el("button", "ov-btn" + (galleryFilter === key ? " on" : ""), `${esc(t(label))} (${n})`); b.type = "button";
+    b.onclick = () => { galleryFilter = key; renderGallery(); };
+    box.appendChild(b);
+  }
+}
+
+function renderGallery() {
+  renderGalleryFilters();
+  const grid = $("gallery"); grid.replaceChildren();
+  const items = galleryItems.filter((m) => galleryFilter === "all" || m.kind === galleryFilter);
+  if (!items.length) { grid.appendChild(el("div", "gallery-empty", esc(t("mediaEmpty")))); return; }
+  items.forEach((m, i) => {
+    const b = el("button", "g-item"); b.type = "button"; b.title = `${m.dir}/${nameOf(m)}`;
+    const thumb = el("div", "g-thumb");
+    if (m.kind === "image") { const img = el("img"); img.loading = "lazy"; img.src = withToken(m.url); thumb.appendChild(img); }
+    else if (m.kind === "video") {
+      const v = el("video"); v.muted = true; v.preload = "metadata"; v.src = withToken(m.url) + "#t=0.1";
+      v.onerror = () => v.replaceWith(el("span", "icon", "▶")); thumb.appendChild(v);
+    } else thumb.appendChild(el("span", "icon", "⬡"));
+    thumb.appendChild(el("span", "tag", esc(t(KIND_TAG[m.kind]))));
+    const when = new Date(m.mtime * 1000).toLocaleString();
+    b.append(thumb, el("div", "g-cap", `<div class="nm">${esc(nameOf(m))}</div><div class="sub">${esc(m.dir)} · ${fmtSize(m.size)} · ${esc(when)}</div>`));
+    b.onclick = () => openViewer(items, i);
+    grid.appendChild(b);
+  });
+}
+
+async function loadGallery() {
+  try {
+    const res = await api("/api/artifacts");
+    if (!res.ok) throw new Error(res.status);
+    galleryItems = await res.json();
+    renderGallery();
+  } catch (err) {
+    $("gallery").replaceChildren(el("div", "gallery-empty", esc(t("mediaLoadFailed", { err: err.message || err }))));
+  }
+}
+function openGallery() { galleryOverlay.classList.add("open"); toggleSidebar(false); loadGallery(); }
+
+$("open-gallery").onclick = openGallery;
+$("gallery-refresh").onclick = loadGallery;
+$("gallery-close").onclick = () => galleryOverlay.classList.remove("open");
+$("viewer-close").onclick = closeViewer;
+// Swipe left/right between images on touch screens (point clouds use drag to rotate, videos
+// need their controls).
+let swipeFrom = null;
+viewerBody.addEventListener("touchstart", (e) => {
+  const kind = viewerItems[viewerIndex]?.kind;
+  swipeFrom = e.touches.length === 1 && viewerItems.length > 1 && kind !== "pointcloud" && kind !== "video"
+    ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+}, { passive: true });
+viewerBody.addEventListener("touchend", (e) => {
+  if (!swipeFrom) return;
+  const dx = e.changedTouches[0].clientX - swipeFrom.x, dy = e.changedTouches[0].clientY - swipeFrom.y;
+  swipeFrom = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) stepViewer(dx < 0 ? 1 : -1);
+}, { passive: true });
+document.addEventListener("keydown", (e) => {
+  if (modal && !viewer.classList.contains("open") && e.key === "Escape") {
+    e.preventDefault(); closeModal(); return;
+  }
+  if (viewer.classList.contains("open")) {
+    if (e.key === "Escape") { e.preventDefault(); closeViewer(); }
+    else if (!/^(INPUT|SELECT|TEXTAREA|VIDEO)$/.test(e.target.tagName) && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault(); stepViewer(e.key === "ArrowLeft" ? -1 : 1);
+    }
+  } else if (galleryOverlay.classList.contains("open") && e.key === "Escape") {
+    galleryOverlay.classList.remove("open");
+  }
+});
+
+// ---------- dialogs: all chats, suggested prompts, skills ----------
+const modalBack = $("modal-back");
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+function openModal(kind, render, dirty = () => false) {
+  if (modal && !closeModal()) return;
+  modal = { kind, render, dirty };
+  modalBack.classList.add("open"); toggleSidebar(false);
+  render();
+}
+function closeModal(force = false) {
+  if (!modal) return true;
+  if (!force && modal.dirty() && !confirm(t("confirmDiscard"))) return false;
+  modal = null; modalBack.classList.remove("open"); modalBack.replaceChildren();
+  return true;
+}
+function modalShell({ title, help, wide = false, head = [] }) {
+  const box = el("div", "modal" + (wide ? " wide" : ""));
+  box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-label", title);
+  const h = el("div", "modal-head", `<h2>${esc(title)}</h2>`);
+  h.append(...head, mkButton("✕", "icon", () => closeModal(), t("close")));
+  box.appendChild(h);
+  if (help) box.appendChild(el("div", "modal-help", esc(help)));
+  modalBack.replaceChildren(box);
+  return box;
+}
+function mkButton(label, cls, onclick, title) {
+  const b = el("button", "btn" + (cls ? " " + cls : ""), esc(label)); b.type = "button";
+  if (title) b.title = title;
+  b.onclick = onclick;
+  return b;
+}
+async function errText(res) {
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail;
+  if (Array.isArray(detail)) return detail.map((d) => d.msg).join("; ");
+  return detail || `HTTP ${res.status}`;
+}
+function setModalError(text) { const e = $("modal-error"); if (e) e.textContent = text || ""; }
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleString(lang === "zh" ? "zh-CN" : undefined, { dateStyle: "short", timeStyle: "short" });
+}
+modalBack.addEventListener("mousedown", (e) => { if (e.target === modalBack) closeModal(); });
+
+// All chats
+let chatQuery = "";
+function openChatsModal() {
+  chatQuery = "";
+  openModal("chats", () => {
+    const box = modalShell({ title: t("allChatsTitle") });
+    const search = el("input", "field"); search.type = "search"; search.value = chatQuery;
+    search.placeholder = t("searchChats"); search.setAttribute("aria-label", t("searchChats"));
+    search.oninput = () => { chatQuery = search.value; renderChatsModal(); };
+    const top = el("div", "modal-help"); top.appendChild(search);
+    const body = el("div", "modal-body"); body.id = "modal-chats";
+    box.append(top, body);
+    renderChatsModal();
+    search.focus();
+  });
+}
+function renderChatsModal() {
+  const body = $("modal-chats");
+  if (!body) return;
+  const q = chatQuery.trim().toLowerCase();
+  const items = chats.filter((c) => !q || chatTitle(c).toLowerCase().includes(q));
+  body.replaceChildren();
+  if (!items.length) { body.appendChild(el("div", "modal-empty", esc(t("noChatsMatch")))); return; }
+  for (const c of items) {
+    const { row, del } = chatRow(c, "modal-chat", () => closeModal(true));
+    del.before(el("span", "when", esc(fmtWhen(c.updatedAt))));
+    body.appendChild(row);
+  }
+}
+
+// Suggested prompts (welcome screen)
+function suggestionsFor(l) {
+  if (Array.isArray(customSuggestions[l])) return customSuggestions[l];
+  return (I18N[l].suggestions || []).map(([label, text]) => ({ label, text }));
+}
+function setCustomSuggestions(custom) {
+  customSuggestions = custom || {};
+  if (thread.querySelector(".welcome")) showWelcome();
+}
+async function loadSuggestions() {
+  try {
+    const res = await api("/api/suggestions");
+    if (res.ok) setCustomSuggestions((await res.json()).custom);
+  } catch { /* keep the built-in prompts */ }
+}
+function openPromptsModal() {
+  const st = { lang, items: [], saved: "" };
+  const load = (l) => { st.lang = l; st.items = suggestionsFor(l).map((s) => ({ ...s })); st.saved = JSON.stringify(st.items); };
+  const dirty = () => JSON.stringify(st.items) !== st.saved;
+  const isCustom = () => Array.isArray(customSuggestions[st.lang]);
+  load(lang);
+
+  async function save() {
+    const items = st.items.map((s) => ({ label: s.label.trim(), text: s.text.trim() }));
+    if (items.some((s) => !s.label || !s.text)) return setModalError(t("promptsInvalid"));
+    const res = await api(`/api/suggestions/${st.lang}`, { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ items }) });
+    if (!res.ok) return setModalError(t("saveFailed", { err: await errText(res) }));
+    setCustomSuggestions((await res.json()).custom);
+    closeModal(true); toast(t("saved"));
+  }
+  async function reset() {
+    const name = st.lang === "zh" ? "中文" : "English";
+    if (!confirm(t("confirmResetPrompts", { lang: name }))) return;
+    const res = await api(`/api/suggestions/${st.lang}`, { method: "DELETE" });
+    if (!res.ok) return setModalError(t("saveFailed", { err: await errText(res) }));
+    setCustomSuggestions((await res.json()).custom);
+    load(st.lang); render(); toast(t("saved"));
+  }
+  function render(focusLast = false) {
+    const prevScroll = modalBack.querySelector(".modal-body")?.scrollTop || 0;
+    const langSeg = el("div", "seg");
+    for (const [l, label] of [["en", "EN"], ["zh", "中文"]]) {
+      const b = el("button", l === st.lang ? "on" : "", label); b.type = "button";
+      b.onclick = () => {
+        if (l === st.lang || (dirty() && !confirm(t("confirmDiscard")))) return;
+        load(l); render();
+      };
+      langSeg.appendChild(b);
+    }
+    const state = el("span", "tag-pill" + (isCustom() ? " on" : ""), esc(t(isCustom() ? "promptsCustom" : "promptsBuiltin")));
+    const box = modalShell({ title: t("promptsTitle"), help: t("promptsHelp"), head: [state, langSeg] });
+    const body = el("div", "modal-body");
+    if (!st.items.length) body.appendChild(el("div", "modal-empty", esc(t("promptsEmpty"))));
+    st.items.forEach((item, i) => {
+      const row = el("div", "prompt-row");
+      const label = el("input", "field"); label.maxLength = 40; label.value = item.label;
+      label.placeholder = t("promptLabel"); label.setAttribute("aria-label", t("promptLabel"));
+      label.oninput = () => { item.label = label.value; };
+      const text = el("textarea", "field"); text.maxLength = 1000; text.rows = 2; text.value = item.text;
+      text.placeholder = t("promptText"); text.setAttribute("aria-label", t("promptText"));
+      text.oninput = () => { item.text = text.value; };
+      const move = (d) => { [st.items[i], st.items[i + d]] = [st.items[i + d], st.items[i]]; render(); };
+      const up = mkButton("↑", "icon", () => move(-1), t("moveUp")); up.disabled = i === 0;
+      const down = mkButton("↓", "icon", () => move(1), t("moveDown")); down.disabled = i === st.items.length - 1;
+      const rm = mkButton("✕", "icon danger", () => { st.items.splice(i, 1); render(); }, t("remove"));
+      const ops = el("div", "ops"); ops.append(up, down, rm);
+      row.append(label, text, ops); body.appendChild(row);
+    });
+    const add = mkButton(t("addPrompt"), "", () => { st.items.push({ label: "", text: "" }); render(true); });
+    add.disabled = st.items.length >= 24;
+    body.appendChild(add);
+    const foot = el("div", "modal-foot");
+    const resetBtn = mkButton(t("resetPrompts"), "danger", reset); resetBtn.disabled = !isCustom();
+    const err = el("span", "modal-error grow"); err.id = "modal-error";
+    foot.append(resetBtn, err, mkButton(t("cancel"), "", () => closeModal()), mkButton(t("save"), "primary", save));
+    box.append(body, foot);
+    body.scrollTop = focusLast ? body.scrollHeight : prevScroll;
+    if (focusLast) body.querySelector(".prompt-row:last-of-type input")?.focus();
+  }
+  openModal("prompts", render, dirty);
+}
+
+// Skills (.claude/skills)
+const SKILL_TEMPLATE = (name) => `---\nname: ${name}\ndescription: What this skill does and when the agent should use it.\n---\n\n# Title\n\nInstructions for the agent.\n`;
+function openSkillsModal() {
+  const st = { list: [], name: null, isNew: false, content: "", saved: "", enabled: true };
+  const dirty = () => st.name !== null && st.content !== st.saved;
+  const skillUrl = (name) => `/api/skills/${encodeURIComponent(name)}`;
+  const show = (s) => Object.assign(st, { name: s.name, isNew: false, content: s.content, saved: s.content, enabled: s.enabled });
+
+  async function refresh() {
+    try {
+      const res = await api("/api/skills");
+      if (!res.ok) throw new Error(await errText(res));
+      st.list = await res.json();
+    } catch (err) { toast(t("loadFailed", { err: err.message || err }), true); }
+  }
+  async function select(name) {
+    if (name === st.name && !st.isNew) return;
+    if (dirty() && !confirm(t("confirmDiscard"))) return;
+    const res = await api(skillUrl(name));
+    if (!res.ok) return toast(t("loadFailed", { err: await errText(res) }), true);
+    show(await res.json()); render();
+  }
+  function startNew() {
+    if (dirty() && !confirm(t("confirmDiscard"))) return;
+    Object.assign(st, { name: "", isNew: true, content: SKILL_TEMPLATE(""), saved: SKILL_TEMPLATE(""), enabled: true });
+    render(); $("skill-name")?.focus();
+  }
+  function cancelEdit() {
+    if (st.isNew) Object.assign(st, { name: null, isNew: false, content: "", saved: "" });
+    else st.content = st.saved;
+    render();
+  }
+  async function save() {
+    if (st.isNew && !st.name) return setModalError(t("skillNameHint"));
+    const res = st.isNew
+      ? await api("/api/skills", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ name: st.name, content: st.content }) })
+      : await api(skillUrl(st.name), { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ content: st.content }) });
+    if (!res.ok) return setModalError(t("saveFailed", { err: await errText(res) }));
+    show(await res.json()); await refresh(); render(); toast(t("saved"));
+  }
+  async function toggle() {
+    if (st.enabled && !confirm(t("confirmDisableSkill", { name: st.name }))) return;
+    if (dirty() && !confirm(t("confirmDiscard"))) return;
+    const res = await api(skillUrl(st.name), { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ enabled: !st.enabled }) });
+    if (!res.ok) return setModalError(t("saveFailed", { err: await errText(res) }));
+    const s = await res.json(); show(s); await refresh(); render();
+    toast(t(s.enabled ? "skillEnabled" : "skillDisabled", { name: s.name }));
+  }
+  async function remove() {
+    const name = st.name;
+    if (!confirm(t("confirmDeleteSkill", { name }))) return;
+    const res = await api(skillUrl(name), { method: "DELETE" });
+    if (!res.ok) return setModalError(t("saveFailed", { err: await errText(res) }));
+    Object.assign(st, { name: null, isNew: false, content: "", saved: "" });
+    await refresh(); render(); toast(t("skillDeleted", { name }));
+  }
+  function render() {
+    const box = modalShell({ title: t("skillsTitle"), help: t("skillsHelp"), wide: true, head: [mkButton(t("newSkill"), "", startNew)] });
+    const pane = el("div", "skills-pane");
+    const list = el("div", "skill-list");
+    if (!st.list.length) list.appendChild(el("div", "modal-empty", esc(t("noSkills"))));
+    for (const s of st.list) {
+      const item = el("button", "skill-item" + (s.name === st.name && !st.isNew ? " active" : "") + (s.enabled ? "" : " off"),
+        `<div class="nm"><span>${esc(s.name)}</span><span class="tag-pill${s.enabled ? " on" : ""}">${esc(t(s.enabled ? "skillOn" : "skillOff"))}</span></div><div class="ds">${esc(s.description)}</div>`);
+      item.type = "button"; item.title = s.description; item.onclick = () => select(s.name);
+      list.appendChild(item);
+    }
+    const edit = el("div", "skill-edit");
+    if (st.name === null) {
+      edit.appendChild(el("div", "modal-empty", esc(t("selectSkill"))));
+    } else {
+      const body = el("div", "modal-body");
+      const title = el("div", "skill-title");
+      const area = el("textarea", "field"); area.value = st.content; area.spellcheck = false;
+      area.setAttribute("aria-label", "SKILL.md");
+      area.oninput = () => { st.content = area.value; };
+      if (st.isNew) {
+        const nameIn = el("input", "field"); nameIn.id = "skill-name"; nameIn.maxLength = 64; nameIn.value = st.name;
+        nameIn.placeholder = t("skillNameHint"); nameIn.setAttribute("aria-label", t("skillName"));
+        nameIn.oninput = () => {
+          // Keep the front matter name in step with the folder name while it is typed.
+          st.name = nameIn.value.trim();
+          st.content = st.content.replace(/^(---\r?\n(?:.*\r?\n)*?name:)[^\r\n]*/, `$1 ${st.name}`);
+          area.value = st.content;
+        };
+        title.append(el("span", "", esc(t("skillName"))), nameIn);
+      } else {
+        title.append(el("span", "", esc(st.name)),
+          el("span", "tag-pill" + (st.enabled ? " on" : ""), esc(t(st.enabled ? "skillOn" : "skillOff"))));
+      }
+      body.append(title, area);
+      const foot = el("div", "modal-foot");
+      if (!st.isNew) foot.append(mkButton(t(st.enabled ? "disable" : "enable"), "", toggle), mkButton(t("deleteSkill"), "danger", remove));
+      const err = el("span", "modal-error grow"); err.id = "modal-error";
+      foot.append(err, mkButton(t("cancel"), "", cancelEdit), mkButton(t("save"), "primary", save));
+      edit.append(body, foot);
+    }
+    pane.append(list, edit);
+    box.appendChild(pane);
+  }
+  openModal("skills", render, dirty);
+  refresh().then(() => { if (modal?.kind === "skills") render(); });
+}
+
+$("more-chats").onclick = openChatsModal;
+$("manage-prompts").onclick = openPromptsModal;
+$("manage-skills").onclick = openSkillsModal;
+
+// ---------- misc ----------
+let toastTimer;
+function toast(text, bad = false) {
+  const t = $("toast"); t.textContent = text; t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = "toast"), bad ? 9000 : 5000);
+}
+function resize() {
+  input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  sendBtn.disabled = busy || !input.value.trim() || !currentChat;
+}
+
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || busy || !currentChat) return;
+  if (!wsSend({ type: "chat", chatId: currentChat, content: text })) return toast(t("notConnected"), true);
+  input.value = ""; resize();
+});
+input.addEventListener("input", resize);
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); } });
+$("new-chat").onclick = () => { createChat(); toggleSidebar(false); };
+$("refresh-status").onclick = () => loadStatus(true);
+function toggleSidebar(open) {
+  $("sidebar").classList.toggle("open", open);
+  $("scrim").classList.toggle("open", open);
+}
+$("menu").onclick = () => toggleSidebar(!$("sidebar").classList.contains("open"));
+$("scrim").onclick = () => toggleSidebar(false);
+$("stop-turn").onclick = () => currentChat && wsSend({ type: "interrupt", chatId: currentChat });
+// Arm recovery after an emergency stop: shown while the arm reports one.
+let recovering = false;
+function renderRecover() {
+  const b = $("recover"), a = lastStatus?.arm;
+  b.hidden = !recovering && !(a?.available && a.arm_status === "emergency stop");
+  b.disabled = recovering;
+  b.querySelector(".lbl").textContent = t(recovering ? "recovering" : "recover");
+}
+$("recover").onclick = async () => {
+  if (recovering || !confirm(t("confirmRecover"))) return;
+  recovering = true; renderRecover();
+  try {
+    const res = await api("/api/recover", { method: "POST" });
+    if (!res.ok) toast(t("recoverFailed", { out: await errText(res) }), true);
+  } catch (err) {
+    toast(t("recoverFailed", { out: err.message || err }), true);
+  } finally {
+    recovering = false; loadStatus(true);
+  }
+};
+$("estop").onclick = async () => {
+  // Use HTTP as well as the socket so the stop goes out even if the socket is reconnecting.
+  if (!wsSend({ type: "estop" })) {
+    const res = await api("/api/estop", { method: "POST" }).catch(() => null);
+    if (!res?.ok) toast(t("estopFailed"), true);
+  }
+};
+
+for (const b of document.querySelectorAll("#lang-switch button")) b.onclick = () => setLang(b.dataset.lang);
+for (const b of document.querySelectorAll("#theme-switch button")) b.onclick = () => setTheme(b.dataset.themeValue);
+for (const b of document.querySelectorAll("#mode-switch button")) b.onclick = () => switchMode(b.dataset.mode);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+  if (!localStorage.getItem("robotTheme")) applyTheme(e.matches ? "dark" : "light");
+});
+
+applyStaticText();
+applyTheme(document.documentElement.dataset.theme);
+showWelcome();
+loadConfig();
+loadStatus();
+setInterval(() => { if (!document.hidden) loadStatus(); }, 15000);
+connect();
+</script>
+</body>
+</html>

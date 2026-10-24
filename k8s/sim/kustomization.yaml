@@ -1,0 +1,37 @@
+# Robot agent, SIMULATION ONLY, on Kubernetes.
+#
+#   docker build -f Dockerfile.sim -t <registry>/robot-agent-sim:<tag> . && docker push ...
+#   kubectl create namespace robot-agent-sim
+#   kubectl -n robot-agent-sim create secret generic robot-agent-sim-secrets \
+#     --from-literal=ROBOT_AGENT_TOKEN=<ui access token> \
+#     --from-literal=CC_AUTH_TOKEN=<gateway token>
+#   # edit the image and CC_BASE_URL below, then:
+#   kubectl apply -k k8s/sim
+#   kubectl -n robot-agent-sim port-forward svc/robot-agent-sim 8000:80
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: robot-agent-sim
+labels:
+  - pairs:
+      app.kubernetes.io/name: robot-agent-sim
+    includeSelectors: true
+
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  # - ingress.yaml   # enable to expose the UI through an ingress controller
+
+images:
+  - name: robot-agent-sim
+    newName: robot-agent-sim   # e.g. registry.example.com/robot/robot-agent-sim
+    newTag: latest
+
+configMapGenerator:
+  - name: robot-agent-sim-config
+    literals:
+      # Anthropic-compatible gateway (LiteLLM proxy) reachable from the cluster.
+      - CC_BASE_URL=http://litellm.litellm.svc.cluster.local:4000
+      - CC_MODEL=claude-opus-5.5
+      - CC_MAX_TURNS=40
+      - ROBOT_APPROVAL_TIMEOUT=120

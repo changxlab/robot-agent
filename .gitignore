@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+# Runtime output: camera captures, maps, logs, simulation state
+artifacts/
+# Saved chats and agent transcripts
+.claude/sessions/
+*.egg-info/
+build/
+dist/
+# Python environments created by deploy/install.sh
+.venv/
+.venv-litellm/

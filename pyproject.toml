@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robot-agent"
+version = "0.1.0"
+description = "Web operator assistant for a Unitree B2 + AgileX Piper robot: a Claude agent that runs the ./robot tools through skills"
+readme = "README.md"
+# ROS 2 Humble (Ubuntu 22.04) ships Python 3.10; ./robot runs the tools with that interpreter.
+requires-python = ">=3.10"
+dependencies = [
+    # Web server and agent (server.py, robot_agent/)
+    "claude-agent-sdk>=0.2.173",
+    "fastapi>=0.115",
+    "pydantic>=2.0",
+    "uvicorn>=0.30",
+    "websockets>=12.0",
+    # Robot tools (robot_tools/); rclpy and the ROS message packages come from ROS 2, not pip
+    "pyyaml>=6.0",
+    "numpy>=1.21",
+    "opencv-python-headless>=4.5",
+]
+
+[project.optional-dependencies]
+# AgileX Piper arm over CAN (real hardware)
+robot = ["piper_sdk>=0.6"]
+# LiteLLM proxy for GitHub Copilot models (copilot_stream_fix.py, test_claude_opus_55.py)
+proxy = ["litellm[proxy]>=1.80", "openai>=1.0"]
+dev = ["pytest>=7.0", "httpx>=0.27"]
+
+[tool.setuptools]
+packages = ["robot_agent", "robot_tools"]
+py-modules = ["server", "copilot_stream_fix"]
+
+[tool.setuptools.package-data]
+robot_tools = ["sim_images/*.md", "sim_images/*/*.jpg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

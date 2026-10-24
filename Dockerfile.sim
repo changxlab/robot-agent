@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1
+#
+# Robot agent web server + ./robot tools, SIMULATION ONLY. No ROS 2, CAN, camera or Piper SDK:
+# every ./robot command returns simulated [SIM] data and the mode cannot be switched to REAL
+# (ROBOT_MODE_LOCK=sim). Suitable for Kubernetes; see k8s/sim/ for the manifests.
+#
+# Build:
+#   docker build -f Dockerfile.sim -t robot-agent-sim .
+#
+# Run locally (the agent needs the LiteLLM / Anthropic-compatible gateway at CC_BASE_URL):
+#   docker run --rm -p 8000:8000 -e ROBOT_AGENT_TOKEN=<token> \
+#     --add-host=host.docker.internal:host-gateway -e CC_BASE_URL=http://host.docker.internal:4000 \
+#     robot-agent-sim
+
+ARG PYTHON_VERSION=3.10
+FROM python:${PYTHON_VERSION}-slim-bookworm
+
+ARG USERNAME=robot
+ARG USER_UID=10001
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# ffmpeg: browser-playable H.264 clips from `./robot camera record`; iproute2/procps: used by
+# `./robot status`; tini reaps the agent's shell subprocesses when running as PID 1.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg iproute2 procps tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Group 0 ownership + group-writable paths so the image also runs under an arbitrary UID
+# (e.g. OpenShift restricted SCC).
+RUN useradd --uid "${USER_UID}" --gid 0 --create-home --shell /bin/bash "${USERNAME}" \
+    && chmod g=u "/home/${USERNAME}"
+
+WORKDIR /app
+
+# Dependencies from pyproject.toml in their own layer (placeholder sources so the editable
+# install resolves); the real sources are copied below. No [robot] extra: piper_sdk is hardware.
+COPY pyproject.toml README.md ./
+RUN mkdir robot_agent robot_tools \
+    && touch robot_agent/__init__.py robot_tools/__init__.py server.py copilot_stream_fix.py \
+    && python3 -m pip install --config-settings editable_mode=compat -e . \
+    && rm -rf *.egg-info
+
+COPY --chown=${USER_UID}:0 . .
+RUN mkdir -p artifacts .claude/sessions \
+    && chown -R "${USER_UID}:0" /app \
+    && chmod -R g=u /app
+
+USER ${USER_UID}
+ENV HOME=/home/${USERNAME} \
+    USER=${USERNAME} \
+    ROBOT_PYTHON=/usr/local/bin/python3 \
+    ROBOT_MODE=sim \
+    ROBOT_MODE_LOCK=sim \
+    HOST=0.0.0.0 \
+    PORT=8000
+
+VOLUME ["/app/artifacts", "/app/.claude/sessions"]
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python3 -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8000\")}/', timeout=4)"
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sh", "-c", "exec uvicorn server:app --host \"$HOST\" --port \"$PORT\" --proxy-headers --forwarded-allow-ips='*'"]

@@ -1,0 +1,26 @@
+# ingress-nginx example. The UI keeps a long-lived WebSocket open on /ws, so raise the proxy
+# timeouts.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: robot-agent-sim
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: 20m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: robot-agent-sim.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: robot-agent-sim
+                port:
+                  name: http
+  # tls:
+  #   - hosts: [robot-agent-sim.example.com]
+  #     secretName: robot-agent-sim-tls
