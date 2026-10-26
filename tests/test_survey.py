@@ -5,7 +5,7 @@ import time
 import pytest
 
 from robot_agent import safety
-from robot_tools import camera, config, survey, trajectory
+from robot_tools import base, camera, config, survey, trajectory
 from robot_tools.common import ToolError
 
 
@@ -19,13 +19,14 @@ def sim(monkeypatch, tmp_path):
     monkeypatch.setattr(camera, "v4l2_devices", lambda: [{
         "path": "/dev/v4l/by-id/usb-Orbbec_Gemini-video-index0", "node": "/dev/video6",
         "name": "Orbbec Gemini", "vendor": "Orbbec", "formats": "MJPG,YUYV", "kind": "colour"}])
+    base.SimBase().command("stand-up")
     yield tmp_path
     config.load.cache_clear()
 
 
 def args(**kw):
-    defaults = dict(name=None, camera=None, seconds=None, fps=None, speed=None, rate=1.0,
-                    settle_wait=60.0, timeout=5.0)
+    defaults = dict(name=None, camera=None, seconds=None, fps=None, photos=None, speed=None,
+                    rate=1.0, settle_wait=60.0, timeout=5.0)
     return argparse.Namespace(**{**defaults, **kw})
 
 

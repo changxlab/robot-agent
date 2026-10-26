@@ -156,24 +156,33 @@ def collect() -> dict[str, Any]:
 
 def summarize(r: dict[str, Any]) -> dict[str, Any]:
     issues = []
+    alerts = config.load()["status"]
+    low_pct, hot_c = alerts["alert_battery_pct"], alerts["alert_temp_c"]
     b = r["base"]
     if not b.get("reachable"):
         issues.append("B2 base not reachable")
     else:
         if b.get("error_code"):
             issues.append(f"B2 error code {b['error_code']}")
-        if b.get("battery_pct", 100) < 25:
-            issues.append(f"B2 battery low ({b['battery_pct']}%)")
-        if b.get("hot_motors"):
-            issues.append(f"B2 hot motors {b['hot_motors']} (max {b.get('max_motor_temp_c')} C, "
-                          f"safe < {base.MOTOR_HOT_C} C)")
+        if b.get("battery_pct", 100) < low_pct:
+            issues.append(f"B2 battery low ({b['battery_pct']}% < {low_pct}%)")
+        warm = [i for i, t in enumerate(b.get("motor_temps_c", [])) if t > hot_c]
+        if warm:
+            issues.append(f"B2 motors {warm} above {hot_c} C (max {b.get('max_motor_temp_c')} C; "
+                          f"walking stops at {base.MOTOR_HOT_C} C)")
         if b.get("lost_motors"):
             issues.append(f"B2 lost motors {b['lost_motors']}")
     a = r["arm"]
     if not a.get("available"):
         issues.append("arm not reachable")
-    elif not a.get("healthy"):
-        issues.append(f"arm: {a['arm_status']} {', '.join(a['errors'])}".strip())
+    else:
+        if not a.get("healthy"):
+            issues.append(f"arm: {a['arm_status']} {', '.join(a['errors'])}".strip())
+        warm = [f"j{m['joint']} {max(m['motor_temp_c'], m['driver_temp_c'])} C"
+                for m in a.get("motors", [])
+                if max(m["motor_temp_c"], m["driver_temp_c"]) > hot_c]
+        if warm:
+            issues.append(f"arm motors/drivers above {hot_c} C: {', '.join(warm)}")
     for name, state in r["cameras"].items():
         if state == "missing":
             issues.append(f"camera {name} missing")

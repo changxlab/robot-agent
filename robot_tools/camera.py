@@ -19,6 +19,7 @@ DARK_MEAN = 5.0  # mean pixel value below which a frame is reported as dark
 VIDEO_API_GET_IMAGE_SAMPLE = 1001
 MAX_RECORD_S = 20.0
 MAX_RECORD_FPS = 15.0
+MAX_RUN_S = 180.0  # longest a recording camera keeps running for on_frame (stills)
 SIM_IMAGE_NOTE = ("SIMULATED image: a real plant photo standing in for the simulated farm "
                   "(simulation, not the robot's actual view)")
 SIM_CLIP_NOTE = ("SIMULATED clip: a real plant photo standing in for the simulated farm "
@@ -149,11 +150,19 @@ def grab(name: str, source: str, timeout: float):
     return frame, note, False
 
 
+def save_image(name: str, frame) -> Path:
+    """Write a BGR frame as artifacts/captures/<time>_<name>.jpg."""
+    import cv2
+
+    path = _out_path(name)
+    if not cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, 88]):
+        raise ToolError(f"could not write {path}")
+    return path
+
+
 def capture(name: str, source: str, timeout: float,
             fallback: str = "") -> tuple[Path, str, bool]:
     """Capture one frame; returns (path, description, synthetic)."""
-    import cv2
-
     try:
         frame, extra, synthetic_frame = grab(name, source, timeout)
     except Unavailable as exc:
@@ -161,9 +170,7 @@ def capture(name: str, source: str, timeout: float,
             raise
         frame, extra, synthetic_frame = grab(name, fallback, timeout)
         extra += f" (via fallback {fallback}: {source} unavailable - {exc})"
-    path = _out_path(name)
-    if not cv2.imwrite(str(path), frame, [cv2.IMWRITE_JPEG_QUALITY, 88]):
-        raise ToolError(f"could not write {path}")
+    path = save_image(name, frame)
     h, w = frame.shape[:2]
     note = (f" {SIM_IMAGE_NOTE}" if synthetic_frame else " real camera frame")
     note += extra
@@ -210,14 +217,19 @@ def encode_video(frames: list, fps: float, name: str) -> Path:
 
 def record(name: str, source: str, seconds: float, fps: float, timeout: float,
            fallback: str = "", start_event=None, stop_event=None, start_wait: float = 300.0,
-           label: str | None = None) -> tuple[Path, str, bool]:
+           label: str | None = None, on_frame=None,
+           run_seconds: float | None = None) -> tuple[Path, str, bool]:
     """Record a short clip; returns (path, description, synthetic).
 
     With ``start_event`` the camera is opened first and recording starts when the event is set
     (so a clip can be synchronised with a motion); ``stop_event`` ends it early.
+    ``on_frame(t, frame)`` is called for every frame taken at ``fps`` (``t`` = s since the start).
+    With ``run_seconds`` the camera keeps running that long for ``on_frame`` (e.g. still photos
+    over a whole motion) while the clip itself still ends after ``seconds``.
     """
     seconds = max(1.0, min(seconds, MAX_RECORD_S))
     fps = max(1.0, min(fps, MAX_RECORD_FPS))
+    run_s = max(seconds, min(run_seconds or 0.0, MAX_RUN_S))
     label = label or name
     kind, _, target = source.partition(":")
     if not source:
@@ -225,16 +237,23 @@ def record(name: str, source: str, seconds: float, fps: float, timeout: float,
     if config.is_sim() and kind != "v4l2":
         _wait_start(start_event, start_wait)
         start = time.time()
-        frames = [_synthetic_at(name, i / fps, start + i / fps) for i in range(int(seconds * fps))]
+        frames = []
+        for i in range(int(run_s * fps)):
+            frame = _synthetic_at(name, i / fps, start + i / fps)
+            if i < int(seconds * fps):
+                frames.append(frame)
+            if on_frame is not None:
+                on_frame(i / fps, frame)
         path = encode_video(frames, fps, label)
         h, w = frames[0].shape[:2]
         return path, (f"{w}x{h} {len(frames)} frames at {fps:.0f} fps ({seconds:.1f} s) "
                       f"{SIM_CLIP_NOTE}"), True
     if kind == "v4l2":
-        return _record_v4l2(target, seconds, fps, label, start_event, stop_event, start_wait)
+        return _record_v4l2(target, seconds, fps, label, start_event, stop_event, start_wait,
+                            on_frame, run_s)
     _wait_start(start_event, start_wait)
     frames, start, used = [], time.monotonic(), source
-    while time.monotonic() - start < seconds and not (stop_event and stop_event.is_set()):
+    while time.monotonic() - start < run_s and not (stop_event and stop_event.is_set()):
         t0 = time.monotonic()
         try:
             frame, _, _ = grab(name, used, timeout)
@@ -243,11 +262,15 @@ def record(name: str, source: str, seconds: float, fps: float, timeout: float,
                 raise
             used = fallback
             frame, _, _ = grab(name, used, timeout)
-        frames.append(frame)
+        t = t0 - start
+        if t < seconds:
+            frames.append(frame)
+        if on_frame is not None:
+            on_frame(t, frame)
         time.sleep(max(0.0, 1.0 / fps - (time.monotonic() - t0)))
     if not frames:
         raise ToolError("recording was stopped before any frame was captured")
-    elapsed = max(time.monotonic() - start, 1e-3)
+    elapsed = max(min(time.monotonic() - start, seconds), 1e-3)
     real_fps = max(1.0, len(frames) / elapsed)
     path = encode_video(frames, real_fps, label)
     h, w = frames[0].shape[:2]
@@ -262,10 +285,12 @@ def _wait_start(start_event, start_wait: float) -> None:
 
 
 def _record_v4l2(device: str, seconds: float, fps: float, label: str, start_event,
-                 stop_event, start_wait: float) -> tuple[Path, str, bool]:
+                 stop_event, start_wait: float, on_frame=None,
+                 run_s: float | None = None) -> tuple[Path, str, bool]:
     """Keep the device open for the whole clip (opening it per frame is far too slow)."""
     import cv2
 
+    run_s = max(seconds, run_s or 0.0)
     dev: int | str = int(device) if device.isdigit() else device
     if isinstance(dev, str) and not Path(dev).exists():
         raise Unavailable(f"video device {dev} does not exist")
@@ -278,20 +303,24 @@ def _record_v4l2(device: str, seconds: float, fps: float, label: str, start_even
         _wait_start(start_event, start_wait)
         frames, start = [], time.monotonic()
         next_at = start
-        while time.monotonic() - start < seconds and not (stop_event and stop_event.is_set()):
+        while time.monotonic() - start < run_s and not (stop_event and stop_event.is_set()):
             ok, frame = cap.read()  # keep draining the driver buffer so frames stay current
             if not ok or frame is None:
                 if not frames:
                     raise Unavailable(f"no frame from {device}")
                 break
-            if time.monotonic() >= next_at:
-                frames.append(frame)
+            now = time.monotonic()
+            if now >= next_at:
+                if now - start < seconds:
+                    frames.append(frame)
+                if on_frame is not None:
+                    on_frame(now - start, frame)
                 next_at += 1.0 / fps
     finally:
         cap.release()
     if not frames:
         raise ToolError("recording was stopped before any frame was captured")
-    elapsed = max(time.monotonic() - start, 1e-3)
+    elapsed = max(min(time.monotonic() - start, seconds), 1e-3)
     real_fps = max(1.0, len(frames) / elapsed)
     path = encode_video(frames, real_fps, label)
     h, w = frames[0].shape[:2]

@@ -30,7 +30,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from . import safety
+from . import instructions, safety
 from .config import Settings
 from .media import media_in_output
 from .store import ChatStore
@@ -92,8 +92,9 @@ class ChatSession:
         self._client: ClaudeSDKClient | None = None
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._worker: asyncio.Task | None = None
-        # Robot skills the running agent process was started with.
+        # Robot skills and CLAUDE.md version the running agent process was started with.
         self._agent_skills: list[str] | None = None
+        self._agent_instructions: str | None = None
         self._ready = asyncio.Event()
         self._approvals: dict[str, asyncio.Future] = {}
         self._decisions: dict[str, safety.Decision] = {}
@@ -145,9 +146,12 @@ class ChatSession:
         self._save_meta()
         prompt = "\n\n".join([*self._notes, text])
         self._notes.clear()
-        if self._worker is not None and \
-                self._agent_skills != robot_skills(self.settings.project_dir):
-            # Skills were changed in the UI: restart the agent; it resumes this chat's context.
+        project = self.settings.project_dir
+        if self._worker is not None and (
+                self._agent_skills != robot_skills(project)
+                or self._agent_instructions != instructions.fingerprint(project)):
+            # Skills or CLAUDE.md were changed (e.g. in the UI). Claude Code reads both when it
+            # starts, so restart the agent; it resumes this chat's context.
             await self._stop_worker()
         if self._worker is None:
             self._worker = asyncio.create_task(self._run(), name=f"chat-{self.id}")
@@ -264,6 +268,7 @@ class ChatSession:
     def _options(self, resume: str | None = None) -> ClaudeAgentOptions:
         s = self.settings
         self._agent_skills = robot_skills(s.project_dir)
+        self._agent_instructions = instructions.fingerprint(s.project_dir)
         return ClaudeAgentOptions(
             model=s.model,
             system_prompt=SYSTEM_PROMPT,

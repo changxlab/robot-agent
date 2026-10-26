@@ -40,6 +40,13 @@ base:
   # and other devices mounted on the B2 it can crush them. `./robot base recovery-stand` refuses
   # and the agent is blocked from it unless this is true. Recover a fallen robot by hand.
   allow_recovery_stand: false
+  # Arm work (`./robot piper record/play`, `./robot survey run`) is only allowed while the B2 is
+  # standing still: not lying down, damped, sitting or walking. Set false only on a test bench
+  # without the B2 - never to get around a refusal.
+  require_standing_for_arm: true
+  # Optional extra check: minimum SportModeState body height (m) that counts as standing.
+  # 0 = check the sport mode only. Measure the standing height of this B2 before setting it.
+  stand_min_height_m: 0.0
 
 arm:
   # The single AgileX Piper arm. CAN is brought up by piper-can.service; manual activation
@@ -120,7 +127,21 @@ survey:
   camera: orbbec_gemini
   video_seconds: 20   # clip length from the start of the replay (max 20)
   video_fps: 10
+  photos: 8           # still photos spread evenly over the whole arm motion (0-10)
   motion_seconds: [15, 30]   # expected length of the survey motion (outside: warning only)
+
+status:
+  # `./robot status` reports these as issues to alert the operator about.
+  alert_battery_pct: 20   # B2 battery below this %
+  alert_temp_c: 60        # any B2 leg motor or Piper arm motor/driver above this temperature
+
+site:
+  # Where the robot works: `./robot weather` (Open-Meteo, no API key) and the agent's context.
+  name: Wuxi, Jiangsu, China
+  latitude: 31.49
+  longitude: 120.31
+  timezone: Asia/Shanghai
+  description: Traditional Chinese medicine (TCM) herb farm; the operator is an R&D scientist
 
 logs:
   # Extra log files/directories the agent may inspect with `./robot logs`

@@ -277,7 +277,7 @@
       background: #2d2f2c; font-size: 13px; white-space: pre-wrap; box-shadow: 0 8px 30px rgba(0,0,0,.2); display: none; z-index: 50; }
     .toast.show { display: block; } .toast.bad { background: #b0261d; }
 
-    /* Dialogs: all chats, suggested prompts, skills */
+    /* Dialogs: all chats, prompts, skills, agent rules (CLAUDE.md) */
     .modal-back { position: fixed; inset: 0; z-index: 35; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(10,12,10,.45); }
     .modal-back.open { display: flex; }
     .modal { display: flex; flex-direction: column; width: min(720px, 100%); max-height: min(86vh, 900px); border: 1px solid var(--line); border-radius: 14px;
@@ -323,6 +323,8 @@
     .skill-edit textarea.field { flex: 1; min-height: 160px; resize: none; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; tab-size: 2; }
     .skill-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; }
     .skill-title .field { max-width: 260px; font-weight: 500; }
+    .modal > .skill-edit { flex: 1; }
+    .skill-title .meta { margin-left: auto; font-size: 11.5px; font-weight: 500; color: var(--muted); }
     .modal-error { color: var(--deny-ink); font-size: 12.5px; white-space: pre-wrap; }
 
     #menu { display: none; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 6px 10px; font-size: 15px; }
@@ -402,8 +404,9 @@
 
     <div class="section" data-i18n="manageSection">Manage</div>
     <div class="side-links">
-      <button class="side-link" id="manage-prompts" type="button" data-i18n="managePrompts">✎ Suggested prompts</button>
+      <button class="side-link" id="manage-prompts" type="button" data-i18n="managePrompts">✎ Prompts</button>
       <button class="side-link" id="manage-skills" type="button" data-i18n="manageSkills">⚙ Skills</button>
+      <button class="side-link" id="manage-instructions" type="button" data-i18n="manageInstructions">¶ CLAUDE.md</button>
     </div>
 
     <div class="settings">
@@ -494,12 +497,14 @@ const I18N = {
     welcomeText: "The agent uses skills to check the B2 base and Piper arm, capture camera images and video clips, read logs, diagnose problems, move the robot, teach and replay arm motions, build maps and save lidar point clouds. You approve every motion.",
     suggestions: [
       ["Status", "Check the robot's overall health and summarise any problems."],
+      ["Field check", "Brief me on the robot: is the B2 standing or moving, its battery and temperatures, what the front and rear cameras see, whether the arm, RealSense, Orbbec Gemini and iCamera are live, the logs if anything is wrong, and today's weather in Wuxi."],
       ["Cameras", "Capture images from all cameras and describe what the robot sees."],
       ["Logs", "Inspect the robot logs from the last hour and explain any errors."],
       ["Arm", "Report the state of the arm, then move joint 1 by 15 degrees and back."],
       ["Teach a motion", "Record a 15 second arm trajectory named pick_1 - I will press the teach button and guide the arm by hand."],
       ["Replay a motion", "Check the arm and the space around it, then replay the arm trajectory pick_1 at half speed."],
-      ["Plant survey", "Run a plant survey: replay the survey arm motion and record a 20 second video with the Gemini camera."],
+      ["Teach & replay (Gradio)", "Teach and replay an arm motion with the piper-gradio skill: check that the B2 is standing and the arm is ready, look in front of the arm with the Orbbec Gemini, guide me into teach mode, record a motion named pick_2 (up to 20 s) when I say start, save it once the arm is back and still, then ask me whether to replay it."],
+      ["Plant survey", "Start a plant survey: check that the B2 is standing still, look around with the front and rear cameras, check the arm, the Orbbec Gemini view and the survey motion, then ask me before starting. Take 8 photos and a video during the arm sweep and summarise the result."],
       ["Base", "Stand the B2 up and walk forward half a metre, checking the path with the front camera first."],
       ["Mapping", "Start mapping this area, explore it in small steps, and save the map as field_1."],
       ["Crops", "Look at the crop row beside the robot with the arm camera and report plant health and ripe fruit."],
@@ -547,12 +552,14 @@ const I18N = {
     welcomeText: "智能体通过技能检查 B2 本体和 Piper 机械臂、拍摄相机图像和视频片段、读取日志、诊断问题、控制机器人运动、示教并回放机械臂动作、建图并保存激光雷达点云。每一次运动都需要你批准。",
     suggestions: [
       ["状态", "检查机器人的整体健康状况，并总结存在的问题。"],
+      ["现场简报", "给我做一次机器人现场简报：B2 是站立、趴下还是在运动，电量和温度，前后相机看到的情况，机械臂、RealSense、Orbbec Gemini 和 iCamera 是否在线，有问题时查看日志，以及今天无锡的天气。"],
       ["相机", "从所有相机拍摄图像，并描述机器人看到的场景。"],
       ["日志", "检查最近一小时的机器人日志，并解释其中的错误。"],
       ["机械臂", "报告机械臂的状态，然后将关节 1 转动 15 度再转回。"],
       ["示教录制", "录制一条 15 秒的机械臂轨迹，命名为 pick_1：我会按下示教按钮并用手引导机械臂。"],
       ["轨迹回放", "检查机械臂状态和周围空间，然后以半速回放机械臂轨迹 pick_1。"],
-      ["植株巡检", "进行植株巡检：回放机械臂巡检动作，并用 Gemini 相机录制 20 秒视频。"],
+      ["示教与回放 (Gradio)", "使用 piper-gradio 技能示教并回放机械臂动作：检查 B2 是否站立、机械臂是否就绪，用 Orbbec Gemini 查看机械臂前方，引导我进入示教模式，我说开始后录制动作 pick_2（最长 20 秒），机械臂回位静止后保存，然后问我是否回放。"],
+      ["植株巡检", "开始植株巡检：检查 B2 是否站立静止，用前后相机查看周围，检查机械臂、Orbbec Gemini 画面和巡检动作轨迹，开始前先问我。机械臂扫描过程中拍摄 8 张照片并录制视频，最后总结结果。"],
       ["本体", "让 B2 站起来并向前走半米，先用前置相机检查路径。"],
       ["建图", "开始对这片区域建图，小步探索，并把地图保存为 field_1。"],
       ["作物", "用机械臂相机查看机器人旁边的作物行，报告植株长势和成熟的果实。"],
@@ -619,14 +626,14 @@ const MEDIA_I18N = {
   },
 };
 for (const l of Object.keys(MEDIA_I18N)) I18N[l] = { ...MEDIA_I18N[l], ...(I18N[l] || {}) };
-// Chat history, suggested-prompt and skill management strings, merged into I18N.
+// Chat history, prompt, skill and CLAUDE.md management strings, merged into I18N.
 const MANAGE_I18N = {
   en: {
     moreChats: "⋯ All chats ({n})", allChatsTitle: "All chats", searchChats: "Search chats…", noChatsMatch: "No chats match.",
-    manageSection: "Manage", managePrompts: "✎ Suggested prompts", manageSkills: "⚙ Skills",
+    manageSection: "Manage", managePrompts: "✎ Prompts", manageSkills: "⚙ Skills", manageInstructions: "¶ CLAUDE.md",
     close: "Close (Esc)", cancel: "Cancel", save: "Save", saving: "Saving…", saved: "Saved", saveFailed: "Could not save: {err}",
     loadFailed: "Could not load: {err}", confirmDiscard: "Discard your unsaved changes?",
-    promptsTitle: "Suggested prompts",
+    promptsTitle: "Prompts",
     promptsHelp: "The cards on the welcome screen of an empty chat. Each language has its own list; changes are saved on the robot and shown to every operator.",
     promptsLang: "Language", promptLabel: "Label", promptText: "Prompt sent to the agent", addPrompt: "＋ Add prompt",
     resetPrompts: "Reset to built-in prompts", confirmResetPrompts: "Replace the {lang} prompts with the built-in ones?",
@@ -639,13 +646,17 @@ const MANAGE_I18N = {
     confirmDisableSkill: "Disable \"{name}\"? The agent will no longer be able to use it.",
     skillDeleted: "Skill {name} deleted", skillEnabled: "Skill {name} enabled", skillDisabled: "Skill {name} disabled",
     selectSkill: "Select a skill to view or edit it.", noSkills: "No skills found.", skillNameHint: "lowercase-name",
+    instructionsTitle: "Agent rules (CLAUDE.md)",
+    instructionsHelp: "The operating rules the agent reads at the start of every chat - where it works and for whom, how to use the skills and the ./robot tool, and the safety rules (CLAUDE.md in the project folder). Changes apply in each chat from its next message: the agent restarts and keeps the chat's context.",
+    reload: "↻ Reload", reloadTitle: "Load CLAUDE.md again from the robot", loadingText: "Loading…",
+    instructionsSaved: "CLAUDE.md saved - it applies from the next message in each chat",
   },
   zh: {
     moreChats: "⋯ 全部会话（{n}）", allChatsTitle: "全部会话", searchChats: "搜索会话…", noChatsMatch: "没有匹配的会话。",
-    manageSection: "管理", managePrompts: "✎ 建议提示词", manageSkills: "⚙ 技能",
+    manageSection: "管理", managePrompts: "✎ 提示词", manageSkills: "⚙ 技能", manageInstructions: "¶ CLAUDE.md",
     close: "关闭（Esc）", cancel: "取消", save: "保存", saving: "正在保存…", saved: "已保存", saveFailed: "保存失败：{err}",
     loadFailed: "加载失败：{err}", confirmDiscard: "放弃未保存的修改？",
-    promptsTitle: "建议提示词",
+    promptsTitle: "提示词",
     promptsHelp: "空会话欢迎页上的卡片。每种语言单独一组；修改保存在机器人上，所有操作员都能看到。",
     promptsLang: "语言", promptLabel: "标题", promptText: "发送给智能体的提示词", addPrompt: "＋ 添加提示词",
     resetPrompts: "恢复内置提示词", confirmResetPrompts: "用内置提示词替换{lang}提示词？",
@@ -658,6 +669,10 @@ const MANAGE_I18N = {
     confirmDisableSkill: "停用“{name}”？智能体将无法再使用该技能。",
     skillDeleted: "已删除技能 {name}", skillEnabled: "已启用技能 {name}", skillDisabled: "已停用技能 {name}",
     selectSkill: "选择一个技能以查看或编辑。", noSkills: "没有找到技能。", skillNameHint: "小写名称",
+    instructionsTitle: "智能体规则（CLAUDE.md）",
+    instructionsHelp: "智能体在每个会话开始时读取的工作规则：在哪里工作、为谁服务，如何使用技能和 ./robot 工具，以及安全规则（项目目录下的 CLAUDE.md）。修改从每个会话的下一条消息起生效：智能体会重新启动并保留会话上下文。",
+    reload: "↻ 重新加载", reloadTitle: "从机器人重新加载 CLAUDE.md", loadingText: "正在加载…",
+    instructionsSaved: "CLAUDE.md 已保存，从每个会话的下一条消息起生效",
   },
 };
 for (const l of Object.keys(MANAGE_I18N)) I18N[l] = { ...MANAGE_I18N[l], ...(I18N[l] || {}) };
@@ -1321,7 +1336,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ---------- dialogs: all chats, suggested prompts, skills ----------
+// ---------- dialogs: all chats, prompts, skills, agent rules (CLAUDE.md) ----------
 const modalBack = $("modal-back");
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -1396,7 +1411,7 @@ function renderChatsModal() {
   }
 }
 
-// Suggested prompts (welcome screen)
+// Prompts (welcome screen cards)
 function suggestionsFor(l) {
   if (Array.isArray(customSuggestions[l])) return customSuggestions[l];
   return (I18N[l].suggestions || []).map(([label, text]) => ({ label, text }));
@@ -1582,9 +1597,62 @@ function openSkillsModal() {
   refresh().then(() => { if (modal?.kind === "skills") render(); });
 }
 
+// Agent rules (CLAUDE.md)
+function openInstructionsModal() {
+  const st = { loaded: false, content: "", saved: "", hash: "", size: 0, updatedAt: null };
+  const dirty = () => st.loaded && st.content !== st.saved;
+  const metaText = () => `${(st.size / 1024).toFixed(1)} KB · ${fmtWhen(st.updatedAt)}`;
+  const take = (d) => Object.assign(st, { loaded: true, content: d.content, saved: d.content, hash: d.hash, size: d.size, updatedAt: d.updatedAt });
+  async function load() {
+    const res = await api("/api/instructions");
+    if (!res.ok) { toast(t("loadFailed", { err: await errText(res) }), true); return false; }
+    take(await res.json());
+    return true;
+  }
+  async function save() {
+    const res = await api("/api/instructions", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ content: st.content, baseHash: st.hash }) });
+    if (!res.ok) return setModalError(t("saveFailed", { err: await errText(res) }));
+    take(await res.json());
+    setModalError("");
+    const meta = $("instructions-meta"); if (meta) meta.textContent = metaText();
+    toast(t("instructionsSaved"));
+  }
+  async function reload() {
+    if (dirty() && !confirm(t("confirmDiscard"))) return;
+    if (await load() && modal?.kind === "instructions") render();
+  }
+  function render() {
+    const box = modalShell({ title: t("instructionsTitle"), help: t("instructionsHelp"), wide: true,
+      head: [mkButton(t("reload"), "", reload, t("reloadTitle"))] });
+    const edit = el("div", "skill-edit");
+    const body = el("div", "modal-body");
+    if (!st.loaded) {
+      body.appendChild(el("div", "modal-empty", esc(t("loadingText"))));
+    } else {
+      const title = el("div", "skill-title");
+      const meta = el("span", "meta", esc(metaText())); meta.id = "instructions-meta";
+      title.append(el("span", "", "CLAUDE.md"), meta);
+      const area = el("textarea", "field"); area.value = st.content; area.spellcheck = false;
+      area.setAttribute("aria-label", "CLAUDE.md");
+      area.oninput = () => { st.content = area.value; };
+      area.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); } };
+      body.append(title, area);
+    }
+    const foot = el("div", "modal-foot");
+    const err = el("span", "modal-error grow"); err.id = "modal-error";
+    const saveBtn = mkButton(t("save"), "primary", save); saveBtn.disabled = !st.loaded;
+    foot.append(err, mkButton(t("cancel"), "", () => closeModal()), saveBtn);
+    edit.append(body, foot);
+    box.appendChild(edit);
+  }
+  openModal("instructions", render, dirty);
+  load().then((ok) => { if (ok && modal?.kind === "instructions") render(); });
+}
+
 $("more-chats").onclick = openChatsModal;
 $("manage-prompts").onclick = openPromptsModal;
 $("manage-skills").onclick = openSkillsModal;
+$("manage-instructions").onclick = openInstructionsModal;
 
 // ---------- misc ----------
 let toastTimer;

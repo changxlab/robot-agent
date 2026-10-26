@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import arm, base, camera, logs, mapping, status, survey, trajectory
+from . import (arm, base, camera, logs, mapping, piper_gradio, status, survey, trajectory,
+               weather)
 from .common import EXIT_ERROR, ToolError, fail, sim_tag
 
 
@@ -37,9 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     camera.register(sub)
     arm.register(sub)
     trajectory.register(sub)
+    piper_gradio.register(sub)
     survey.register(sub)
     base.register(sub)
     mapping.register(sub)
+    weather.register(sub)
     p = sub.add_parser("estop", help="stop the base and emergency-stop the arm")
     p.set_defaults(func=estop)
     return parser

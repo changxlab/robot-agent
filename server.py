@@ -11,7 +11,7 @@ REST:
   POST   /api/estop                stop all actuators and interrupt every agent turn
   POST   /api/recover              recover the arm after an emergency stop (`./robot arm take-control`)
   GET    /api/artifacts            media files under artifacts/ (newest first)
-  GET    /api/suggestions          custom welcome-screen prompts per UI language
+  GET    /api/suggestions          custom welcome-screen prompts ("Prompts") per UI language
   PUT    /api/suggestions/{lang}   save the prompts for a language {items: [{label, text}]}
   DELETE /api/suggestions/{lang}   back to the built-in prompts for a language
   GET    /api/skills               robot skills (.claude/skills, disabled ones included)
@@ -20,6 +20,8 @@ REST:
   PUT    /api/skills/{name}        save SKILL.md {content}
   PATCH  /api/skills/{name}        enable or disable a skill {enabled}
   DELETE /api/skills/{name}        delete a skill folder
+  GET    /api/instructions         the agent's operating rules (CLAUDE.md) with a version hash
+  PUT    /api/instructions         save CLAUDE.md {content, baseHash}; 409 if it changed meanwhile
   GET    /artifacts/{captures|maps|videos|pointclouds}/{file}
                                    images, mp4/webm video (Range supported), pcd/ply point clouds
   GET    /static/...               front-end libraries (three.js)
@@ -51,6 +53,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from robot_agent import instructions as instruction_file
 from robot_agent import skills as skill_files
 from robot_agent.config import PROJECT_DIR, Settings
 from robot_agent.media import ARTIFACT_DIRS, kind_of, list_media
@@ -470,6 +473,29 @@ def delete_skill(name: str):
     skill_call(skill_files.delete_skill, name)
     log_skill_change("deleted", name)
     return {"ok": True}
+
+
+# ----- agent instructions (CLAUDE.md) -----
+
+class InstructionsContent(BaseModel):
+    content: str
+    baseHash: str | None = None
+
+
+@app.get("/api/instructions", dependencies=api)
+def get_instructions():
+    return instruction_file.read(settings.project_dir)
+
+
+@app.put("/api/instructions", dependencies=api)
+def put_instructions(req: InstructionsContent):
+    try:
+        saved = instruction_file.write(settings.project_dir, req.content, req.baseHash)
+    except instruction_file.InstructionsError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    # Takes effect in each chat from its next message (the agent restarts with the new rules).
+    logger.warning("CLAUDE.md updated from the web UI (%d bytes)", saved["size"])
+    return saved
 
 
 # ----- WebSocket -----

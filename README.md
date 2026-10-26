@@ -107,11 +107,13 @@ npm install -g @musistudio/claude-code-router
                                           ▼
                               Claude Code CLI ──Skill/Bash──▶ ./robot (robot_tools)
                                                                  ├─ status  健康检查
+                                                                 ├─ weather 无锡天气（Open-Meteo）
                                                                  ├─ logs    ROS/系统/内核日志
                                                                  ├─ camera  拍照 / look 识别
                                                                  ├─ arm     Piper 机械臂
                                                                  ├─ traj    机械臂轨迹录制 / 回放（示教模式）
-                                                                 ├─ survey  植株巡检：回放巡检动作并录制 Gemini 视频
+                                                                 ├─ piper   同上，使用 AgiLex Gradio 版录制 / 回放逻辑（已移除界面）
+                                                                 ├─ survey  植株巡检：回放巡检动作，Gemini 拍照并录制视频
                                                                  ├─ base    B2 运动
                                                                  ├─ map     SLAM 建图
                                                                  └─ estop   急停
@@ -126,13 +128,14 @@ npm install -g @musistudio/claude-code-router
 | `robot_agent/media.py` | 可预览的媒体类型与目录、工具输出中 `IMAGE:` / `VIDEO:` / `POINTCLOUD:` 行的解析 |
 | `robot_agent/store.py` | 会话持久化：聊天记录与 Claude 对话记录保存到 `.claude/sessions/` |
 | `robot_agent/skills.py` | 界面中的技能管理：列出、查看、编辑、新建、停用（移到 `.claude/skills-disabled/`）和删除 `.claude/skills/` 下的技能 |
-| `robot_agent/suggestions.py` | 界面欢迎页的建议提示词（按语言保存到 `.claude/sessions/suggestions.json`） |
+| `robot_agent/suggestions.py` | 界面欢迎页的提示词（按语言保存到 `.claude/sessions/suggestions.json`） |
+| `robot_agent/instructions.py` | 界面中编辑智能体规则 `CLAUDE.md`（保存时检查版本，避免覆盖他处的修改） |
 | `robot_agent/safety.py` | Bash 命令安全分级（allow / ask / deny） |
-| `index.html` | 操作界面：会话、工具卡片、审批、媒体预览（图片、MP4/WebM 视频、PCD/PLY 点云 3D 查看器、全屏查看与媒体浏览）、状态面板（含 B2 电机最高温度，< 70 °C 为安全）、侧栏最近 5 个会话与“全部会话”窗口（可搜索）、建议提示词与技能管理窗口、仿真/真机切换、中英文与深浅色主题、E-STOP |
+| `index.html` | 操作界面：会话、工具卡片、审批、媒体预览（图片、MP4/WebM 视频、PCD/PLY 点云 3D 查看器、全屏查看与媒体浏览）、状态面板（含 B2 电机最高温度，< 70 °C 为安全）、侧栏最近 5 个会话与“全部会话”窗口（可搜索）、提示词、技能与 CLAUDE.md 管理窗口、仿真/真机切换、中英文与深浅色主题、E-STOP |
 | `static/` | 前端静态文件：`pointcloud-viewer.js`（点云查看器）与本地 three.js r186（`vendor/three/`，离线可用，按需加载） |
 | `robot`, `robot_tools/` | 机器人命令行工具（自动 source ROS 与工作空间） |
 | `robot.yaml` | 机器人配置：模式、ROS/DDS、话题、速度上限、机械臂 CAN 口、相机、建图 |
-| `.claude/skills/` | Agent Skills：`robot-status`、`robot-logs`、`robot-camera`、`piper-arm`、`arm-trajectory`、`plant-survey`、`b2-locomotion`、`robot-mapping`、`robot-troubleshooting` |
+| `.claude/skills/` | Agent Skills：`robot-status`、`robot-briefing`、`robot-logs`、`robot-camera`、`piper-arm`、`arm-trajectory`、`piper-gradio`、`plant-survey`、`b2-locomotion`、`robot-mapping`、`robot-troubleshooting` |
 | `.claude/sessions/` | 运行时生成：`chats/<id>/` 会话标题与事件记录，`transcripts/` Claude Code 对话记录（服务重启后恢复会话与 Agent 上下文） |
 | `CLAUDE.md` | Agent 的操作规则（项目记忆，随会话加载） |
 | `artifacts/` | 运行时生成：`captures/` 照片、`videos/` 视频、`pointclouds/` 点云、`maps/` 地图、`trajectories/` 机械臂轨迹 CSV（仿真录制的合成轨迹在 `sim/trajectories/`，真机不会回放）、`logs/` 服务与建图日志 |
@@ -151,15 +154,17 @@ Agent 的每条 Bash 命令都会先经过 `PreToolUse` 钩子分级：
 
 | 分级 | 示例 | 处理 |
 |---|---|---|
-| 自动允许 | `./robot status`、`./robot logs`、`./robot camera look`、`./robot traj list/show`、`./robot survey check`、`./robot camera devices`、`ros2 topic list`、`journalctl`、`./robot estop`、`arm stop`、`base stop` | 直接执行 |
-| 需要审批 | `./robot arm move-joints/home/gripper/enable/take-control`、`./robot traj record/play`、`./robot survey run`、`./robot camera set-source`、`./robot base stand-up/move/damp`、`./robot map start`、`ros2 launch`（`infai_bringup`/`dog_inspection`/`dog_survey` 等会驱动机器人，单独提示）、`ros2 bag play`、巡检/测绘服务调用、修改网络/服务的命令、未知命令 | 浏览器显示审批卡片，操作员批准或拒绝（默认 120 秒无响应自动拒绝） |
+| 自动允许 | `./robot status`、`./robot weather`、`./robot arm teach-button`（仅仿真）、`./robot logs`、`./robot camera look`、`./robot traj list/show`、`./robot piper list/show`、`./robot survey check`、`./robot camera devices`、`ros2 topic list`、`journalctl`、`./robot estop`、`arm stop`、`base stop` | 直接执行 |
+| 需要审批 | `./robot arm move-joints/home/gripper/enable/take-control`、`./robot traj record/play`、`./robot piper record/play`、`./robot survey run`、`./robot camera set-source`、`./robot base stand-up/move/damp`、`./robot map start`、`ros2 launch`（`infai_bringup`/`dog_inspection`/`dog_survey` 等会驱动机器人，单独提示）、`ros2 bag play`、巡检/测绘服务调用、修改网络/服务的命令、未知命令 | 浏览器显示审批卡片，操作员批准或拒绝（默认 120 秒无响应自动拒绝） |
 | 禁止 | `./robot base recovery-stand`（翻身起立会压坏机身上的机械臂和设备；仅当 `robot.yaml` 的 `base.allow_recovery_stand: true` 时改为需要审批）、`sudo`、`reboot`、`rm -rf /`、`cansend`、直接 `ros2 topic pub` 到 `/api/sport/request`、`/cmd_vel*`（含 `/cmd_vel_nav`）或 `/keyboard_ctl`、写 `/dev`/`/sys`，以及不存在的 `./robot` 子命令 | 直接拒绝并告诉 Agent 原因 |
 
 另外：
 
 - `./robot` 内置硬件限制：B2 速度/时长上限（`robot.yaml` 的 `base.max_*`，每次移动结束都会发送 StopMove）、低电量/故障/电机过热/趴下时拒绝行走，`/cmd_vel_nav` 上正在有导航速度指令时拒绝 `base move`（Nav2 空闲时只提示）；Piper 关节角度范围检查（`robot.yaml` 的 `arm.joint_limits_deg`：机械臂装在机身上的实际可达范围，只能比官方范围更窄）、单次关节变化上限（`arm.max_step_deg`）、速度上限、夹爪行程检查；`move-joints/home/gripper` 仅在 CAN 指令模式、状态正常且未在运动时执行（上电或退出示教模式后先 `./robot arm take-control`，按 AgiLex 流程急停并等待 2、3、5 关节回到静止位再切换），超时未到位时就地保持；机械臂命令与 `traj record/play` 互斥（`arm stop` 不受影响）。
 - `./robot traj record/play` 调用 AgiLex 的 `recordTrajectory_new.py` / `playTrajectory_new.py`（`robot.yaml` 的 `arm.trajectory_dir`）：脚本文件不修改，运行时设置录制时长、速度（不超过 `arm.max_speed`）、倍速（≤ 1.0）和轨迹路径，自动应答回车提示，每次运行有超时；回放前检查轨迹关节范围，示教模式或机械臂故障时拒绝回放。
-- `./robot survey check/run`（`plant-survey` 技能）：`check` 检查巡检动作轨迹（`artifacts/trajectories/survey.csv`，缺失时引导操作员示教 15–30 s）、机械臂状态和巡检相机（`robot.yaml` 的 `survey`，默认 `orbbec_gemini`，拍一张测试图）；`run` 用 `traj play` 回放巡检动作，同时从回放开始录制 20 s 视频（`artifacts/videos/<时间>_survey_orbbec_gemini.mp4`）。相机或轨迹不可用时在运动前拒绝执行。Gemini 的 V4L2 设备由操作员选择：`./robot camera devices` 列出采集节点（by-id 路径、厂商、彩色/深度格式），`./robot camera set-source` 测试一帧后保存到 `artifacts/run/camera_sources.json`（覆盖 `robot.yaml`）。
+- `./robot piper record/play/list/show`（`piper-gradio` 技能）：使用 AgiLex Gradio 版 `record.py` / `play.py` 的录制 / 回放逻辑：去掉 Gradio 界面后移植为 `robot_tools/piper_record.py`（`Recorder`）/ `robot_tools/piper_play.py`（`Player`），行为与原文件一致（测试用同一个模拟机械臂运行两者，逐条比对发送的指令和录制的轨迹行），不再依赖 `~/Agilex-College` 下的原文件；CAN 口取自 `robot.yaml`，与 `traj` 共用机械臂锁、关节范围检查、速度 / 倍速（≤ 1.0）/ 循环次数（≤ 5）上限和超时，回放中检测到急停立即停止发送轨迹点；B2 未站立静止时拒绝录制和回放（`base.require_standing_for_arm`）。录制在机械臂移动后回到静止 `--stop-when-still` 秒（默认 3 s）时自动结束并保存 CSV，`--seconds` 为最长时长。仿真模式同样走示教流程：操作员说已按下示教按钮后，Agent 用仅限仿真的 `./robot arm teach-button` 模拟按键（真机拒绝），录制模拟“拉出再回位并静止”的动作。额外参数：录制轮询间隔 `--poll`、`--no-gripper`、每轮回放后的停顿 `--interval`。轨迹与 `traj` 共用 `artifacts/trajectories/`，录制器的带时间戳副本存于 `artifacts/trajectories/sessions/`。
+- `./robot survey check/run`（`plant-survey` 技能）：`check` 检查 B2 是否站立静止、巡检动作轨迹（`artifacts/trajectories/survey.csv`，缺失时引导操作员示教 15–30 s）、机械臂状态和巡检相机（`robot.yaml` 的 `survey`，默认 `orbbec_gemini`，拍一张测试图）；`run` 用 `traj play` 回放巡检动作，从回放开始在整个动作过程中均匀拍摄 `--photos` 张照片（默认 8 张，0–10，`artifacts/captures/<时间>_survey_orbbec_gemini_NN.jpg`），同时录制 20 s 视频（`artifacts/videos/<时间>_survey_orbbec_gemini.mp4`）。B2 未站立静止、相机或轨迹不可用时在运动前拒绝执行。Gemini 的 V4L2 设备由操作员选择：`./robot camera devices` 列出采集节点（by-id 路径、厂商、彩色/深度格式），`./robot camera set-source` 测试一帧后保存到 `artifacts/run/camera_sources.json`（覆盖 `robot.yaml`）。
+- 现场简报（`robot-briefing` 技能）：`./robot status` 的问题列表在 B2 电量低于 20 %、B2 腿部电机或机械臂电机/驱动器温度高于 60 °C 时告警（`robot.yaml` 的 `status`）；`./robot base state` 显示 B2 姿态（站立静止、运动中、趴下等）；`./robot weather` 从 Open-Meteo（无需 API Key）读取 `site`（默认无锡）的当前天气和预报，只读、无需审批，需要联网。
 - 页面右上角 **E-STOP** 直接在服务端执行 `./robot estop`（B2 StopMove + 机械臂急停），同时中断所有 Agent 会话，不经过模型。它不能替代硬件急停按钮。
 - 急停后机械臂保持急停状态（B2 只是停止行走，无需恢复）。机械臂报告急停时 E-STOP 旁出现 **↺ 恢复机械臂** 按钮：确认后服务端执行 `./robot arm take-control`（`POST /api/recover`）——机械臂缓慢下沉到折叠静止位（关节 2、3、5）后解除急停并以 CAN 指令模式重新使能，最长约 60 s；有智能体正在执行时拒绝。恢复过程中按 E-STOP 会立即终止恢复，机械臂保持急停。
 - `./robot base move` 每 0.1 s 发送一次 Move（最长 `base.max_duration` 秒），结束时（包括被中断或进程收到 SIGTERM/SIGINT）总会发送 StopMove。`./robot estop`、`./robot base stop` 和页面 E-STOP 会写入 `artifacts/run/base_stop`，正在执行的 move 在下一次发送前检测到后立即停止发送并发送 StopMove（约 0.1 s 内）。
@@ -308,8 +313,9 @@ ROBOT_MODE=sim ./robot status
 
 侧栏只显示最近 5 个会话，**⋯ 全部会话** 打开可搜索的完整会话列表。侧栏 **管理** 中：
 
-- **建议提示词**：编辑欢迎页卡片（每种语言一组，可增删、排序、恢复内置提示词），保存在服务端（`.claude/sessions/suggestions.json`），所有操作员共享。
+- **提示词**：编辑欢迎页卡片（每种语言一组，可增删、排序、恢复内置提示词），保存在服务端（`.claude/sessions/suggestions.json`），所有操作员共享。
 - **技能**：查看和编辑 `.claude/skills/<名称>/SKILL.md`、新建、停用 / 启用（停用的技能移到 `.claude/skills-disabled/`，智能体看不到）和删除。保存前检查 front matter（`name` 必须与文件夹名一致，并需要 `description`）。修改从每个会话的下一条消息起生效：会话的智能体进程以原上下文（`resume`）重新启动并加载新的技能列表。
+- **CLAUDE.md**：查看和编辑智能体规则（项目目录下的 `CLAUDE.md`：工作场景、技能与 `./robot` 用法、安全规则），Ctrl/⌘+S 保存。保存时检查文件版本：如果期间文件在别处被修改（例如编辑器中），保存会被拒绝，需先 **↻ 重新加载**。修改从每个会话的下一条消息起生效：智能体进程以原上下文重新启动并读取新规则。
 
 ### 环境变量
 

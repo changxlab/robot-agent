@@ -7,6 +7,7 @@ header.identity.api_id set to a B2 sport API id (unitree_sdk2 as2/sport/sport_ap
 from __future__ import annotations
 
 import json
+import math
 import signal
 import time
 from typing import Any
@@ -30,6 +31,11 @@ MODES = {
 }
 MOTOR_HOT_C = 70
 MOVE_RATE_HZ = 10
+# Sport modes in which the B2 is not standing: lie down, joint lock, damping, recovery stand, sit.
+NOT_STANDING_MODES = {5, 6, 7, 8, 10}
+# Body speeds above which the B2 counts as moving (arm work needs it standing still).
+MOVING_SPEED_MPS = 0.05
+MOVING_YAW_RADPS = 0.1
 RECOVERY_STAND_BLOCKED = (
     "recovery-stand is disabled on this robot: the B2 carries a Piper arm, cameras and other "
     "devices, and the recovery motion (rolling the body over and pushing up) can crush them. "
@@ -136,8 +142,6 @@ class SimBase:
         }
 
     def command(self, action: str, params: dict[str, float] | None = None) -> None:
-        import math
-
         modes = {"damp": 7, "balance-stand": 1, "stand-up": 1, "stand-down": 5,
                  "recovery-stand": 1}
         if action in modes:
@@ -207,9 +211,47 @@ def send(action: str, params: dict[str, float] | None = None) -> None:
                         "`./robot base stop`); StopMove was sent")
 
 
+def posture(s: dict[str, Any]) -> str:
+    """"standing still", "moving", or why the B2 is not standing (e.g. "lie down")."""
+    if "mode_id" not in s:
+        return "unknown (no sport mode state)"
+    if s["mode_id"] in NOT_STANDING_MODES:
+        return s.get("mode", f"mode {s['mode_id']}")
+    min_height = float(_cfg().get("stand_min_height_m") or 0.0)
+    height = s.get("body_height_m")
+    if min_height and height is not None and height < min_height:
+        return f"body low ({height} m < {min_height} m)"
+    vx, vy = (s.get("velocity_mps") or [0.0, 0.0])[:2]
+    if math.hypot(vx, vy) > MOVING_SPEED_MPS or abs(s.get("yaw_speed", 0.0)) > MOVING_YAW_RADPS:
+        return "moving"
+    return "standing still"
+
+
+def require_standing_still(purpose: str) -> None:
+    """Refuse ``purpose`` unless the B2 stands still (base.require_standing_for_arm)."""
+    if not _cfg().get("require_standing_for_arm", True):
+        print("note: the B2 standing check is off (base.require_standing_for_arm: false)")
+        return
+    try:
+        state = read_state()
+    except ToolError as exc:
+        raise Unavailable(f"{purpose} needs the B2 standing still, but its state could not be "
+                          f"read: {exc}") from exc
+    current = posture(state)
+    if current == "moving":
+        raise ToolError(f"refusing {purpose}: the B2 is moving; wait until it stands still "
+                        "(`./robot base stop` stops a manual move)")
+    if current != "standing still":
+        raise ToolError(f"refusing {purpose}: the B2 is not standing ({current}); arm work is "
+                        "only allowed while it stands still - stand it up first "
+                        "(`./robot base stand-up`, b2-locomotion skill)")
+    print(f"{sim_tag()}B2: standing still ({state.get('mode')}) - OK for {purpose}")
+
+
 def print_state(s: dict[str, Any]) -> None:
     header("Unitree B2 base")
     kv("mode", s.get("mode", "unknown"))
+    kv("posture", posture(s))
     kv("error code", s.get("error_code", "n/a"))
     if "battery_pct" in s:
         kv("battery", f"{s['battery_pct']}%  ({s['bus_voltage_v']} V, {s['bus_current_a']} A)")

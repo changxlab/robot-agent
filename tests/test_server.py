@@ -586,3 +586,43 @@ def test_estop_cancels_a_running_recovery(client, fake_cli, monkeypatch):
     body = result["r"].json()
     assert body["ok"] is False and "Cancelled by E-STOP" in body["output"]
     assert server._recovery["proc"] is None
+
+
+def test_claude_md_can_be_read_and_saved(client, skills_dir):
+    (skills_dir / "CLAUDE.md").write_text("# Robot operator agent\n\nOld rules.\n")
+    doc = client.get("/api/instructions").json()
+    assert doc["name"] == "CLAUDE.md" and doc["content"].endswith("Old rules.\n")
+    assert doc["hash"] and doc["size"] == len(doc["content"].encode())
+
+    new = "# Robot operator agent\n\nYou work on a TCM farm in Wuxi.\n"
+    saved = client.put("/api/instructions", json={"content": new, "baseHash": doc["hash"]}).json()
+    assert saved["content"] == new and saved["hash"] != doc["hash"]
+    assert (skills_dir / "CLAUDE.md").read_text() == new
+
+    # Saving over a version that changed meanwhile (e.g. in an editor) is refused.
+    stale = client.put("/api/instructions", json={"content": "mine", "baseHash": doc["hash"]})
+    assert stale.status_code == 409 and "changed by someone else" in stale.json()["detail"]
+    assert (skills_dir / "CLAUDE.md").read_text() == new
+    assert client.put("/api/instructions",
+                      json={"content": "  \n", "baseHash": saved["hash"]}).status_code == 400
+    assert client.put("/api/instructions",
+                      json={"content": "x" * 70_000, "baseHash": saved["hash"]}).status_code == 400
+    assert not list(skills_dir.glob(".CLAUDE.md*"))  # no temp file left behind
+
+
+def test_claude_md_changes_restart_the_agent_with_its_context(client, skills_dir):
+    (skills_dir / "CLAUDE.md").write_text("# Rules v1\n")
+    SCRIPT["one"] = []
+    SCRIPT["two"] = []
+    with start_chat(client) as (chat, ws):
+        ws.send_json({"type": "chat", "chatId": chat["id"], "content": "one"})
+        read_until(ws, "done")
+        ws.send_json({"type": "chat", "chatId": chat["id"], "content": "one"})
+        read_until(ws, "done")
+        assert len(FakeClient.created) == 1
+        doc = client.get("/api/instructions").json()
+        client.put("/api/instructions", json={"content": "# Rules v2\n", "baseHash": doc["hash"]})
+        ws.send_json({"type": "chat", "chatId": chat["id"], "content": "two"})
+        read_until(ws, "done")
+    assert len(FakeClient.created) == 2
+    assert FakeClient.created[-1].options.resume == SESSION_ID

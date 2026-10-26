@@ -17,9 +17,10 @@ import os
 import re
 import shlex
 import sys
+import threading
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 ROBOT_CLI = PROJECT_DIR / "robot"
@@ -74,11 +75,20 @@ ROBOT_ACTIONS: dict[tuple[str, str | None], tuple[str, str, str]] = {
     ("arm", "home"): (ASK, "motion", "Move the arm to its home pose"),
     ("arm", "gripper"): (ASK, "motion", "Open/close the gripper"),
     ("arm", "resume"): (ASK, "motion", "Clear the arm emergency stop"),
+    ("arm", "teach-button"): (ALLOW, "read", "Simulate a press of the arm's teach button "
+                                             "(SIM only; refused on the real arm)"),
     ("traj", "list"): (ALLOW, "read", "List recorded arm trajectories"),
     ("traj", "show"): (ALLOW, "read", "Show a recorded arm trajectory"),
     ("traj", "record"): (ASK, "motion", "Record an arm trajectory - the operator presses the "
                                         "teach button and moves the arm by hand"),
     ("traj", "play"): (ASK, "motion", "Replay a recorded arm trajectory - the arm will move"),
+    ("piper", "list"): (ALLOW, "read", "List recorded arm trajectories"),
+    ("piper", "show"): (ALLOW, "read", "Show a recorded arm trajectory"),
+    ("piper", "record"): (ASK, "motion", "Record an arm trajectory with the Gradio recorder - the "
+                                         "operator presses the teach button and moves the arm by "
+                                         "hand"),
+    ("piper", "play"): (ASK, "motion", "Replay a recorded arm trajectory with the Gradio player - "
+                                       "the arm will move"),
     ("survey", "check"): (ALLOW, "read", "Check plant survey readiness (motion, arm, camera)"),
     ("survey", "run"): (ASK, "motion", "Plant survey - the arm replays the survey motion while "
                                        "the survey camera records a video"),
@@ -97,6 +107,7 @@ ROBOT_ACTIONS: dict[tuple[str, str | None], tuple[str, str, str]] = {
     ("map", "save"): (ALLOW, "read", "Save the current map"),
     ("map", "stop"): (ALLOW, "stop", "Stop the mapping process"),
     ("map", "start"): (ASK, "system", "Start the SLAM mapping process"),
+    ("weather", None): (ALLOW, "read", "Read the weather at the robot's site"),
     ("estop", None): (ALLOW, "stop", "Emergency-stop all actuators"),
 }
 
@@ -161,15 +172,59 @@ class _CliUsageError(Exception):
     pass
 
 
-@lru_cache(maxsize=1)
-def _cli_parser() -> argparse.ArgumentParser | None:
-    """The ./robot argument parser, raising instead of exiting on bad arguments."""
+TOOLS_DIR = PROJECT_DIR / "robot_tools"
+_parser_lock = threading.Lock()
+_parser_cache: dict[str, Any] = {"fingerprint": None, "parser": None}
+
+
+def _tools_fingerprint() -> tuple:
+    """Changes whenever a robot_tools source file is added, removed or edited."""
+    try:
+        return tuple(sorted((p.name, p.stat().st_mtime_ns) for p in TOOLS_DIR.glob("*.py")))
+    except OSError:
+        return ()
+
+
+def _is_tools_module(name: str) -> bool:
+    return name == "robot_tools" or name.startswith("robot_tools.")
+
+
+def _fresh_build_parser() -> argparse.ArgumentParser:
+    """Build the parser from the robot_tools code on disk now, not from modules this process
+    imported earlier, and leave those modules (used elsewhere in the server) untouched."""
+    saved = {n: m for n, m in sys.modules.items() if _is_tools_module(n)}
+    for name in saved:
+        del sys.modules[name]
     try:
         if str(PROJECT_DIR) not in sys.path:
             sys.path.append(str(PROJECT_DIR))
         from robot_tools.__main__ import build_parser
 
-        parser = build_parser()
+        return build_parser()
+    finally:
+        for name in [n for n in sys.modules if _is_tools_module(n)]:
+            del sys.modules[name]
+        sys.modules.update(saved)
+
+
+def _cli_parser() -> argparse.ArgumentParser | None:
+    """The ./robot argument parser, raising instead of exiting on bad arguments.
+
+    Rebuilt when the robot_tools sources change, so a long-running server accepts commands
+    added after it started.
+    """
+    fingerprint = _tools_fingerprint()
+    with _parser_lock:
+        if _parser_cache["fingerprint"] == fingerprint:
+            return _parser_cache["parser"]
+        parser = _build_cli_parser()
+        _parser_cache.update(fingerprint=fingerprint, parser=parser)
+        return parser
+
+
+def _build_cli_parser() -> argparse.ArgumentParser | None:
+    try:
+        parser = _fresh_build_parser()
     except Exception:  # the robot tools cannot be imported here; use the plain heuristic
         return None
 

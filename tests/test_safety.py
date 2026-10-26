@@ -1,5 +1,6 @@
 import pytest
 
+from robot_agent import safety
 from robot_agent.safety import ALLOW, ASK, DENY, classify
 
 
@@ -133,3 +134,41 @@ def test_most_restrictive_segment_wins():
     assert classify("./robot status && ./robot base move --vx 0.2").action == ASK
     assert classify("./robot base state | grep mode").action == ALLOW
     assert classify("./robot status; sudo reboot").action == DENY
+
+
+def test_cli_parser_follows_tool_changes_without_a_server_restart(monkeypatch, tmp_path):
+    import shutil
+    import sys
+
+    tools = tmp_path / "robot_tools"
+    shutil.copytree(safety.TOOLS_DIR, tools, ignore=shutil.ignore_patterns("__pycache__"))
+    monkeypatch.setattr(safety, "TOOLS_DIR", tools)
+    monkeypatch.setattr(safety, "PROJECT_DIR", tmp_path)
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys.path)
+    monkeypatch.setattr(safety, "_parser_cache", {"fingerprint": None, "parser": None})
+    loaded = {n: m for n, m in sys.modules.items() if safety._is_tools_module(n)}
+
+    assert classify("./robot status").action == ALLOW
+    first = safety._cli_parser()
+    assert safety._cli_parser() is first  # cached while the sources are unchanged
+    assert classify("./robot newtool").action == DENY
+
+    # A tool added while the server runs is accepted without a restart.
+    (tools / "newtool.py").write_text(
+        "def register(sub):\n"
+        "    sub.add_parser('newtool').set_defaults(func=lambda a: 0)\n")
+    main = tools / "__main__.py"
+    main.write_text(main.read_text()
+                    .replace("from . import (", "from . import (newtool, ")
+                    .replace("    weather.register(sub)\n",
+                             "    weather.register(sub)\n    newtool.register(sub)\n"))
+    assert safety._cli_parser() is not first
+    decision = classify("./robot newtool")
+    assert decision.action == ASK and "not in the safety table" in decision.reason
+    # The robot_tools modules the server already uses are left as they were.
+    assert {n: m for n, m in sys.modules.items() if safety._is_tools_module(n)} == loaded
+
+
+def test_weather_is_a_known_robot_command():
+    decision = classify("./robot weather --days 2")
+    assert (decision.action, decision.category) == (ALLOW, "read")

@@ -304,7 +304,8 @@ class SimArm:
     def __init__(self):
         self.port = config.arm_port()
         self.path = config.artifacts("sim") / "arm.json"
-        self.state = {"enabled": False, "estop": False, "joints_deg": [0.0] * 6, "gripper_mm": 0.0}
+        self.state = {"enabled": False, "estop": False, "teach": False, "joints_deg": [0.0] * 6,
+                      "gripper_mm": 0.0}
         if self.path.exists():
             self.state.update(json.loads(self.path.read_text()))
 
@@ -320,8 +321,9 @@ class SimArm:
     def snapshot(self) -> dict[str, Any]:
         return {
             "can_port": self.port, "can_fps": 200.0,
-            "enabled": [self.state["enabled"]] * 6,
-            "ctrl_mode": "CAN command" if self.state["enabled"] else "standby",
+            "enabled": [self.state["enabled"] and not self.state["teach"]] * 6,
+            "ctrl_mode": ("teach" if self.state["teach"]
+                          else "CAN command" if self.state["enabled"] else "standby"),
             "arm_status": "emergency stop" if self.state["estop"] else "normal",
             "healthy": not self.state["estop"], "moving": False, "errors": [],
             "joints_deg": self.joints_deg(), "gripper_mm": self.state["gripper_mm"],
@@ -332,7 +334,20 @@ class SimArm:
     def enable(self) -> None:
         if self.state["estop"]:
             raise ToolError("the arm is emergency-stopped; run `./robot arm resume` first")
+        if self.state["teach"]:
+            raise ToolError("the arm is in teach mode; the operator must press the teach button "
+                            "to leave it first")
         self.state["enabled"] = True
+
+    def teach_button(self) -> bool:
+        """Simulate a short press of the teach button; returns whether teach mode is now on.
+
+        Entering teach mode releases the motors (the arm is guided by hand); leaving it puts the
+        arm in standby, as on the real Piper.
+        """
+        self.state["teach"] = not self.state["teach"]
+        self.state["enabled"] = False
+        return self.state["teach"]
 
     def disable(self) -> None:
         self.state["enabled"] = False
@@ -437,6 +452,15 @@ def _run_action(arm, args) -> None:
     elif args.action == "disable":
         arm.disable()
         print(f"{sim_tag()}arm disabled (motors released)")
+    elif args.action == "teach-button":
+        if not isinstance(arm, SimArm):
+            raise ToolError("the teach button is a physical button on the arm base; ask the "
+                            "operator to short-press it (teach-button only simulates it in SIM "
+                            "mode)")
+        on = arm.teach_button()
+        state = ("ON: motors released, the arm is guided by hand" if on
+                 else "OFF: the arm is in standby")
+        print(f"{sim_tag()}arm: teach button pressed - teach mode {state}")
     elif args.action == "resume":
         arm.resume()
         print(f"{sim_tag()}arm emergency stop cleared; run `./robot arm take-control` if the "
@@ -482,7 +506,8 @@ def _run_action(arm, args) -> None:
 def register(sub) -> None:
     p = sub.add_parser("arm", help="the AgileX Piper arm and its gripper")
     p.add_argument("action", choices=["status", "enable", "disable", "take-control",
-                                       "move-joints", "home", "gripper", "stop", "resume"])
+                                       "move-joints", "home", "gripper", "stop", "resume",
+                                       "teach-button"])
     p.add_argument("--deg", type=float, nargs=6, metavar="J", help="6 joint angles in degrees")
     p.add_argument("--speed", type=int, help="speed percent (capped by arm.max_speed)")
     p.add_argument("--mm", type=float, help="gripper opening in mm (0-70)")
@@ -493,6 +518,9 @@ def register(sub) -> None:
 
 
 def _dispatch(args) -> int:
+    if args.action == "teach-button" and not config.is_sim():
+        raise ToolError("the teach button is a physical button on the arm base; ask the operator "
+                        "to short-press it (teach-button only simulates it in SIM mode)")
     if args.action == "move-joints" and not args.deg:
         raise ToolError("move-joints requires --deg J1 J2 J3 J4 J5 J6")
     if args.action == "gripper" and args.mm is None:
